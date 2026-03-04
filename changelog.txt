@@ -1,0 +1,33 @@
+---------------------------------------------------------------------------------------------------
+Version: 0.1.3
+Date: 2026-01-10
+  Major Features:
+    - Added new event: Magnetic Storm (if the magnetic-storm and SpaceAge mods are enabled)
+    - Added new event: Bright Day
+  Changes:
+    - The difficulty ratio for technology and evolution has been adjusted. It is now 50/50.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.2
+Date: 2026-01-10
+  Major Features:
+    - Mod can now work without Space Age
+    - Added new event: Crystal Overgrowth
+    - Added new event: Lost Deck
+  Changes:
+    - Rebalanced Player Laser Cannon
+    - Frost Armor recipe rebalance
+  Bugfixes:
+    - Fixed Emergency Return Capsule teleport logic
+---------------------------------------------------------------------------------------------------
+Version: 0.1.1
+Date: 2026-01-07
+  Balancing:
+    - Rebalanced Pirate Laser Cannon
+  Bugfixes:
+    - Fixed event calling issues
+    - Fixed warp heat-pipes functionality
+---------------------------------------------------------------------------------------------------
+Version: 0.1.0
+Date: 2026-01-05
+  Major Features:
+    - Initial release of WDM Expansion
