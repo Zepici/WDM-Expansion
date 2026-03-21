@@ -19,6 +19,13 @@ data:extend({
     setting_type = "runtime-global",
     default_value = false,
     order = "c"
+  },
+  {
+    type = "bool-setting",
+    name = "wdm-expansion-show-turret-buff-text",
+    setting_type = "runtime-global",
+    default_value = true,
+    order = "d"
   }
 })
 
@@ -29,7 +36,7 @@ if mods["ZombieHordeFaction"] then
       name = "wdm-expansion-zombie",
       setting_type = "startup",
       default_value = true,
-      order = "d"
+      order = "e"
     }
   })
 end

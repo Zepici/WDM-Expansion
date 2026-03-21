@@ -1,4 +1,5 @@
 local utils = require("utils")
+require("prototypes.entity.turret_buff")
 
 utils.modify_size(data.raw["electric-turret"]["kj_electric_laser"], 2)
 --utils.modify_size(data.raw["electric-turret"]["kj_electric_laser_player"], 1.5)
@@ -25,7 +26,7 @@ for tier = 1, 10 do
 
     -- Атака босса
     turret.attack_parameters.cooldown = math.max(60, base_turret.attack_parameters.cooldown - tier * 60)  -- быстрее стреляет
-  --turret.attack_parameters.range = base_turret.attack_parameters.range + tier * 10                      -- дальность растёт
+    --turret.attack_parameters.range = base_turret.attack_parameters.range + tier * 10                      -- дальность растёт
     turret.attack_parameters.minimum_attack_cycle_duration = turret.attack_parameters.cooldown                 -- важно!
     turret.attack_parameters.ammo_type = ammo
 

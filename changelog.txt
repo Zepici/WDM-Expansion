@@ -1,6 +1,13 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.4
+Date: 2026-03-21
+  Features:
+    - Turrets placed on the red spaceship floor now receive a slight bonus to attack speed and damage. Fend off threats more effectively!
+  Scripting:
+    - Control.lua has been split into smaller modules.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.3
-Date: 2026-01-10
+Date: 2026-03-04
   Major Features:
     - Added new event: Magnetic Storm (if the magnetic-storm and SpaceAge mods are enabled)
     - Added new event: Bright Day
