@@ -106,7 +106,7 @@ local DEFAULT_EVENTS = {
         initial_count = 3,
         growth_count = 4,
         growth_interval_seconds = 120,
-        ship_exclusion_radius = 50,
+        ship_exclusion_radius = 60,
         melee_bonus_per_crystal = 0.05 -- additive per mined crystal
     },
     bright_day = {
