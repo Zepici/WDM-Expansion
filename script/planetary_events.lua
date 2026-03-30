@@ -103,9 +103,10 @@ local DEFAULT_EVENTS = {
         wdm_alarm = true,
         -- Internal config
         action_name = "crystal_overgrowth",
-        initial_count = 5,
-        growth_count = 3,
+        initial_count = 3,
+        growth_count = 4,
         growth_interval_seconds = 120,
+        ship_exclusion_radius = 50,
         melee_bonus_per_crystal = 0.05 -- additive per mined crystal
     },
     bright_day = {
@@ -394,7 +395,55 @@ local function init_event_storage()
     storage.active_magnetic_storms = storage.active_magnetic_storms or {}
     storage.storm_disabled_entities = storage.storm_disabled_entities or {}
     storage.crystal_overgrowth_active = storage.crystal_overgrowth_active or {}
+    storage.crystal_overgrowth_blocked_zones = storage.crystal_overgrowth_blocked_zones or {}
+    storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
     storage.enemy_melee_damage_bonus = storage.enemy_melee_damage_bonus or 0
+end
+
+local CRYSTAL_LOW_BONUS = 0.025
+local SPECIAL_CRYSTAL_BONUS_TILES = {
+    ["orange-refined-concrete"] = true,
+    ["yellow-refined-concrete"] = true,
+    ["cyan-refined-concrete"] = true,
+    ["purple-refined-concrete"] = true,
+    ["black-refined-concrete"] = true,
+    ["red-refined-concrete"] = true,
+    ["green-refined-concrete"] = true,
+    ["blue-refined-concrete"] = true
+}
+
+local function make_crystal_bonus_key(entity)
+    if not (entity and entity.valid and entity.surface and entity.surface.valid) then return nil end
+    if entity.unit_number then
+        return "u:" .. tostring(entity.unit_number)
+    end
+    local p = entity.position
+    return table.concat({
+        "p",
+        tostring(entity.surface.index),
+        string.format("%.3f", p.x),
+        string.format("%.3f", p.y)
+    }, ":")
+end
+
+local function register_crystal_bonus_override(entity)
+    if not (entity and entity.valid and entity.name == "crystal" and entity.surface and entity.surface.valid) then return end
+    local ok, tile = pcall(function() return entity.surface.get_tile(entity.position) end)
+    if not (ok and tile and tile.valid and tile.name and SPECIAL_CRYSTAL_BONUS_TILES[tile.name]) then return end
+    storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
+    local key = make_crystal_bonus_key(entity)
+    if key then
+        storage.crystal_bonus_overrides[key] = CRYSTAL_LOW_BONUS
+    end
+end
+
+local function take_crystal_bonus_override(entity)
+    if not storage.crystal_bonus_overrides then return nil end
+    local key = make_crystal_bonus_key(entity)
+    if not key then return nil end
+    local bonus = storage.crystal_bonus_overrides[key]
+    storage.crystal_bonus_overrides[key] = nil
+    return bonus
 end
 
 -- ============================================================
@@ -1085,13 +1134,22 @@ ACTIONS.crystal_overgrowth = function(surface, ev, ship_stub, meta)
     if not (surface and surface.valid) then return end
     local cfg = ev or DEFAULT_EVENTS.crystal_overgrowth
     local center = ship_stub and ship_stub.position or nil
-    spawn_crystals(surface, cfg.initial_count or 8, center)
+    storage.crystal_overgrowth_blocked_zones = storage.crystal_overgrowth_blocked_zones or {}
+    local blocked_zone = nil
+    if center then
+        blocked_zone = {
+            position = { x = center.x, y = center.y },
+            radius = cfg.ship_exclusion_radius or DEFAULT_EVENTS.crystal_overgrowth.ship_exclusion_radius 
+        }
+    end
+    storage.crystal_overgrowth_blocked_zones[surface.index] = blocked_zone
+    game.print({ "wdm-expansion.crystal_overgrowth_started", surface.name })
+    spawn_crystals(surface, cfg.initial_count or 8, center, blocked_zone, true)
     storage.crystal_overgrowth_active = storage.crystal_overgrowth_active or {}
     storage.crystal_overgrowth_active[surface.index] = true
     -- configure tick interval (seconds -> ticks)
     storage.crystal_growth_interval = ((cfg.growth_interval_seconds or 60) * 60)
     ensure_crystal_tick()
-    game.print({ "wdm-expansion.crystal_overgrowth_started", surface.name })
     debug("crystal_overgrowth started on surface " .. tostring(surface.index))
 end
 
@@ -1127,21 +1185,54 @@ end
 -- ============================================================
 
 -- ACTION: Crystal overgrowth - spawns crystals and enables periodic growth
-spawn_crystals = function(surface, count, center_pos)
+spawn_crystals = function(surface, count, center_pos, blocked_zone, announce_in_chat)
     if not (surface and surface.valid) then return end
     count = count or 4
+
+    local function is_inside_blocked_zone(pos)
+        if not (blocked_zone and blocked_zone.position and blocked_zone.radius and pos) then return false end
+        return distance(pos, blocked_zone.position) < blocked_zone.radius
+    end
+
     for i = 1, count do
         local pos
         if center_pos then
-            pos = { x = center_pos.x + math.random(-30, 30), y = center_pos.y + math.random(-30, 30) }
+            if blocked_zone and blocked_zone.position and blocked_zone.radius then
+                local angle = math.random() * math.pi * 2
+                local min_dist = blocked_zone.radius + 6
+                local max_dist = min_dist + 48
+                local dist = min_dist + (math.random() * (max_dist - min_dist))
+                pos = {
+                    x = center_pos.x + math.cos(angle) * dist,
+                    y = center_pos.y + math.sin(angle) * dist
+                }
+            else
+                pos = { x = center_pos.x + math.random(-30, 30), y = center_pos.y + math.random(-30, 30) }
+            end
         else
-            pos = { x = math.random(-200, 200), y = math.random(-200, 200) }
+            pos = { x = math.random(-250, 250), y = math.random(-250, 250) }
         end
-        if surface.find_non_colliding_position then
+
+        if not is_inside_blocked_zone(pos) and surface.find_non_colliding_position then
             local safe = surface.find_non_colliding_position("crystal", pos, 16, 0.5, false)
-            if safe then pos = safe end
+            if safe and not is_inside_blocked_zone(safe) then
+                pos = safe
+            else
+                pos = nil
+            end
         end
-        pcall(function() surface.create_entity{ name = "crystal", position = pos, force = game.forces.neutral } end)
+
+        if pos and not is_inside_blocked_zone(pos) then
+            local ok, crystal = pcall(function()
+                return surface.create_entity{ name = "crystal", position = pos, force = game.forces.neutral }
+            end)
+            if ok and crystal and crystal.valid then
+                register_crystal_bonus_override(crystal)
+                if announce_in_chat then
+                    game.print({ "wdm-expansion.crystal_initial_ping", crystal.gps_tag })
+                end
+            end
+        end
     end
 end
 
@@ -1155,9 +1246,13 @@ local function crystal_growth_tick(event)
     for surface_index, _ in pairs(storage.crystal_overgrowth_active) do
         local surface = game.surfaces[surface_index]
         if surface and surface.valid then
-            spawn_crystals(surface, growth)
+            local blocked_zone = storage.crystal_overgrowth_blocked_zones and storage.crystal_overgrowth_blocked_zones[surface_index]
+            spawn_crystals(surface, growth, nil, blocked_zone)
         else
             storage.crystal_overgrowth_active[surface_index] = nil
+            if storage.crystal_overgrowth_blocked_zones then
+                storage.crystal_overgrowth_blocked_zones[surface_index] = nil
+            end
         end
     end
     -- disable tick if no active
@@ -1179,6 +1274,10 @@ local function on_crystal_mined(event)
 
     local ev = storage.events and storage.events.crystal_overgrowth or DEFAULT_EVENTS.crystal_overgrowth
     local bonus = (ev and ev.melee_bonus_per_crystal) or 0.03
+    local bonus_override = take_crystal_bonus_override(entity)
+    if type(bonus_override) == "number" then
+        bonus = bonus_override
+    end
     storage.enemy_melee_damage_bonus = (storage.enemy_melee_damage_bonus or 0) + bonus
 
     -- Try applying to enemy force using available API hooks (best-effort)
@@ -1187,7 +1286,7 @@ local function on_crystal_mined(event)
         if not (f and f.valid) then return end
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("melee", storage.enemy_melee_damage_bonus) end) end
     end)
-    game.print({"wdm-expansion.crystal_mined", math.floor(storage.enemy_melee_damage_bonus * 100)})
+    game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
     debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus))
 end
 
@@ -1533,37 +1632,104 @@ end
 
 
 -- Helper: teleport player to an available ship deck (no inventory penalty)
+local function is_real_tile(surface, position)
+    if not (surface and surface.valid and position) then return false end
+    local ok, tile = pcall(function()
+        return surface.get_tile(position)
+    end)
+    if not (ok and tile and tile.valid and tile.name) then return false end
+    return tile.name ~= "out-of-map"
+end
+
+local function get_valid_spawn_position(surface, force)
+    if not (surface and surface.valid) then return nil end
+    local spawn_pos = nil
+    if force and force.get_spawn_position then
+        local ok, pos = pcall(function()
+            return force.get_spawn_position(surface)
+        end)
+        if ok and pos then spawn_pos = pos end
+    end
+    if not spawn_pos then
+        spawn_pos = { x = 0, y = 0 }
+    end
+    local safe_pos = (find_safe_teleport_position and find_safe_teleport_position(surface, spawn_pos)) or nil
+    if not (safe_pos and is_real_tile(surface, safe_pos)) then return nil end
+    return safe_pos
+end
+
+local function resolve_surface_ref(surface_ref)
+    if not surface_ref then return nil end
+    if type(surface_ref) == "number" or type(surface_ref) == "string" then
+        local s = game.surfaces[surface_ref]
+        if s and s.valid then return s end
+        return nil
+    end
+    if type(surface_ref) == "table" then
+        local by_index = surface_ref.index and game.surfaces[surface_ref.index] or nil
+        if by_index and by_index.valid then return by_index end
+        local by_name = surface_ref.name and game.surfaces[surface_ref.name] or nil
+        if by_name and by_name.valid then return by_name end
+    end
+    local ok_valid, is_valid = pcall(function() return surface_ref.valid end)
+    if ok_valid and is_valid then
+        return surface_ref
+    end
+    return nil
+end
+
+local function get_ship_planet_surface(force)
+    if not (force and force.name and remote.interfaces["WDM"]) then return nil end
+    local ok, planet_info = pcall(function()
+        return remote.call("WDM", "get_ship_planet_info", force.name)
+    end)
+    if not (ok and planet_info) then return nil end
+    return resolve_surface_ref(planet_info.surface or planet_info.surface_name or planet_info.surface_index)
+end
+
 teleport_player_to_available_deck = function(player)
     if not (player and player.valid) then return false end
     local force = player.force
+    local current_surface_index = (player.surface and player.surface.valid and player.surface.index) or nil
     local alt = nil
+    local alt_spawn_pos = nil
     if force and force.name then
         for i = 0, 6 do
             local sname = "ship_interior_" .. i .. "_" .. force.name
             local s = game.surfaces[sname]
             if s and s.valid then
                 local lost = storage.lost_decks and storage.lost_decks[s.index]
-                if not (lost and lost.end_tick and game.tick < lost.end_tick) then
-                    alt = s
-                    break
+                local is_lost = (lost and lost.end_tick and game.tick < lost.end_tick)
+                -- Never select the deck the player currently stands on.
+                local is_current_deck = current_surface_index and s.index == current_surface_index
+                if not is_lost and not is_current_deck then
+                    local safe_pos = get_valid_spawn_position(s, force)
+                    if safe_pos then
+                        alt = s
+                        alt_spawn_pos = safe_pos
+                        break
+                    end
                 end
             end
         end
     end
 
-    if alt then
-        local spawn_pos = (force and force.get_spawn_position and force.get_spawn_position(alt)) or { x = 0, y = 0 }
-        local safe_pos = (find_safe_teleport_position and find_safe_teleport_position(alt, spawn_pos)) or spawn_pos
-        player.teleport(safe_pos, alt)
+    if alt and alt_spawn_pos then
+        player.teleport(alt_spawn_pos, alt)
         return true
-    else
-        local fallback = game.surfaces[1]
-        if fallback and fallback.valid then
-            local safe_pos = (find_safe_teleport_position and find_safe_teleport_position(fallback, { x = 0, y = 0 })) or { x = 0, y = 0 }
-            player.teleport(safe_pos, fallback)
-            return true
+    end
+
+    if force and force.name then
+        local planet_surface = get_ship_planet_surface(force)
+        if planet_surface and planet_surface.valid and (not current_surface_index or planet_surface.index ~= current_surface_index) then
+            local planet_safe_pos = get_valid_spawn_position(planet_surface, force)
+            if planet_safe_pos then
+                player.teleport(planet_safe_pos, planet_surface)
+                return true
+            end
         end
     end
+
     return false
 end
 
@@ -1575,7 +1741,7 @@ find_safe_teleport_position = function(surface, preferred_pos)
     local ok, safe = pcall(function()
         return surface.find_non_colliding_position("character", pos, 32, 0.5, false)
     end)
-    if ok and safe then return safe end
+    if ok and safe and is_real_tile(surface, safe) then return safe end
 
     -- Fallback: radial search outward
     for r = 2, 32, 2 do
@@ -1586,12 +1752,15 @@ find_safe_teleport_position = function(surface, preferred_pos)
             local ok2, safe2 = pcall(function()
                 return surface.find_non_colliding_position("character", try_pos, 2, 0.5, false)
             end)
-            if ok2 and safe2 then return safe2 end
+            if ok2 and safe2 and is_real_tile(surface, safe2) then return safe2 end
         end
     end
 
-    -- Last resort: return preferred position
-    return pos
+    -- Last resort: use preferred position only if it has a real tile.
+    if is_real_tile(surface, pos) then
+        return pos
+    end
+    return nil
 end
 
 -- Обработчик использования предмета экстренного возврата к кораблю

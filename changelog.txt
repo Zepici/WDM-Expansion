@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.5
+Date: 2026-03-30
+  Features:
+    - Emergency Return Capsule now loses 5% fewer resources when increasing quality.
+  Balancing:
+    - Increased the Exocine crystal spawn area.
+    - Exocine crystals can no longer spawn closer than 50 tiles to the ship center.
+    - If an Exocine crystal spawned on the ship, collecting it now boosts bugs 2x less (5% -> 2.5%).
+  Bugfixes:
+    - Fixed teleport error from a Lost Deck when no other decks exist.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.4
 Date: 2026-03-21
   Features:

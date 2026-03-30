@@ -2,7 +2,7 @@ local planetary_events = require("script.planetary_events")
 local heat_pipes = require("script.heat_pipes")
 local turret_buff = require("script.turret_buff")
 local emergency_return = require("script.emergency_return")
-local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
+-- local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
 
 emergency_return.init({
     find_safe_teleport_position = planetary_events.find_safe_teleport_position
@@ -56,7 +56,8 @@ local function register_shared_event_handlers()
 end
 
 local function register_wdm_blueprint_overrides()
-    return wdm_blueprints_overrides.register_wdm_blueprint_overrides()
+    -- return wdm_blueprints_overrides.register_wdm_blueprint_overrides()
+    return false
 end
 
 local function on_wdm_pirate_ship_spawned(_event)
@@ -64,14 +65,14 @@ local function on_wdm_pirate_ship_spawned(_event)
 end
 
 local function register_wdm_pirate_ship_spawned_handler()
-    if not remote.interfaces["WDM"] then return false end
-    local ok, event_id = pcall(function()
-        return remote.call("WDM", "get_on_pirate_ship_spawned")
-    end)
-    if ok and event_id then
-        script.on_event(event_id, on_wdm_pirate_ship_spawned)
-        return true
-    end
+    -- if not remote.interfaces["WDM"] then return false end
+    -- local ok, event_id = pcall(function()
+    --     return remote.call("WDM", "get_on_pirate_ship_spawned")
+    -- end)
+    -- if ok and event_id then
+    --     script.on_event(event_id, on_wdm_pirate_ship_spawned)
+    --     return true
+    -- end
     return false
 end
 
