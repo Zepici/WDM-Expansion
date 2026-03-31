@@ -54,7 +54,7 @@ local DEFAULT_EVENTS = {
     },
     earthquake = {
         -- WDM planet event parameters
-        wdm_chance = 0.13,
+        wdm_chance = 0.12,
         wdm_min_wap = 10,
         wdm_min_tech_progress = 0,
         wdm_no_repeat = false,
@@ -65,8 +65,8 @@ local DEFAULT_EVENTS = {
         -- Internal config
         action_name = "earthquake",
         speed_reduction = -0.4,
-        duration_seconds = 120,
-        duration_threat_weight = 1
+        duration_seconds = 180,
+        tech_influence = 0.7
     },
     lost_deck = {
         -- WDM planet event parameters
@@ -80,8 +80,8 @@ local DEFAULT_EVENTS = {
         wdm_alarm = true,
         -- Internal config
         action_name = "lost_deck",
-        duration_seconds = 180,
-        duration_threat_weight = 1.0
+        duration_seconds = 240,
+        tech_influence = 0.7
     },
     --[[
     pirate_attack = {
@@ -831,7 +831,7 @@ ACTIONS.spawn_laser_boss_far = function(surface, ev, ship_stub, meta)
     end
     if not (force and force.valid) then force = game.forces["player"] end
 
-    local t = get_threat_level(surface, force, { tech_weight = ev.tech_influence or (meta and meta.tech_influence) or 0.4, tech_tiers = ev.tech_tiers or (meta and meta.tech_tiers) })
+    local t = get_threat_level(surface, force, { tech_weight = ev.tech_influence or (meta and meta.tech_influence) or 0.5, tech_tiers = ev.tech_tiers or (meta and meta.tech_tiers) })
     local tier = math.floor(t.threat * 9) + 1
     tier = math.max(1, math.min(10, tier))
     local prototype_name = "kj_electric_laser_t" .. tostring(tier)
@@ -886,7 +886,6 @@ ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
     local ev_cfg = ev or DEFAULT_EVENTS.earthquake
     local base_speed_reduction = ev_cfg.speed_reduction
     local base_duration = ev_cfg.duration_seconds
-    local duration_threat_weight = ev_cfg.duration_threat_weight
 
     -- determine force/context for threat calculation
     local force = nil
@@ -897,7 +896,7 @@ ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
     end
     if not (force and force.valid) then force = game.forces["player"] end
 
-    local t = get_threat_level(surface, force, { tech_weight = ev_cfg.tech_influence or 0.4, tech_tiers = ev_cfg.tech_tiers })
+    local t = get_threat_level(surface, force, { tech_weight = ev_cfg.tech_influence or 0.7, tech_tiers = ev_cfg.tech_tiers })
 
     -- scale duration by threat: higher threat -> longer quake
     local min_mult = 0.5
@@ -944,7 +943,6 @@ ACTIONS.lost_deck = function(surface, ev, ship_stub, meta)
 
     local ev_cfg = ev or DEFAULT_EVENTS.lost_deck
     local base_duration = ev_cfg.duration_seconds or 180
-    local duration_threat_weight = ev_cfg.duration_threat_weight or 1.0
 
     -- determine force/context for threat calculation
     local force = nil
@@ -955,7 +953,7 @@ ACTIONS.lost_deck = function(surface, ev, ship_stub, meta)
     end
     if not (force and force.valid) then force = game.forces["player"] end
 
-    local t = get_threat_level(surface, force, { tech_weight = ev_cfg.tech_influence or 0.4, tech_tiers = ev_cfg.tech_tiers })
+    local t = get_threat_level(surface, force, { tech_weight = ev_cfg.tech_influence or 0.7, tech_tiers = ev_cfg.tech_tiers })
 
     -- scale duration by threat: higher threat -> longer loss
     local min_mult = 0.5
@@ -984,8 +982,33 @@ ACTIONS.lost_deck = function(surface, ev, ship_stub, meta)
         return
     end
 
-    local idx = math.random(#decks)
-    local target = decks[idx]
+    local target = nil
+    while #decks > 0 do
+        local idx = math.random(#decks)
+        local candidate = table.remove(decks, idx)
+        local preferred_pos = { x = 0, y = 0 }
+        if force and force.get_spawn_position then
+            local ok, spawn_pos = pcall(function()
+                return force.get_spawn_position(candidate)
+            end)
+            if ok and spawn_pos then
+                preferred_pos = spawn_pos
+            end
+        end
+
+        local safe_pos = find_safe_teleport_position and find_safe_teleport_position(candidate, preferred_pos) or nil
+        if safe_pos then
+            target = candidate
+            break
+        end
+
+        debug("lost_deck: surface " .. tostring(candidate.name) .. " has no safe teleport position, trying another deck from the pool")
+    end
+
+    if not target then
+        debug("lost_deck: no ship deck with a safe teleport position for force " .. tostring(force and force.name))
+        return
+    end
 
     storage.lost_decks = storage.lost_decks or {}
     storage.lost_decks[target.index] = { end_tick = game.tick + duration_ticks, surface_name = target.name }
@@ -1004,20 +1027,6 @@ ACTIONS.lost_deck = function(surface, ev, ship_stub, meta)
     local minutes = math.ceil(duration_seconds / 60)
     game.print({ "wdm-expansion.lost_deck_started", target.name, minutes })
     debug("lost_deck started on " .. tostring(target.name) .. " for " .. tostring(duration_seconds) .. "s")
-end
-
-local function collect_ship_floor_surfaces_for_force(force)
-    local result = {}
-    if not (force and force.valid and force.name) then return result end
-
-    for i = 0, 6 do
-        local s = game.surfaces["ship_interior_" .. i .. "_" .. force.name]
-        if s and s.valid then
-            table.insert(result, s)
-        end
-    end
-
-    return result
 end
 
 local function apply_magnetic_storm_on_surface(surface, storm_value, end_tick, silent)
@@ -1071,7 +1080,7 @@ ACTIONS.electromagnetic_storm = function(surface, ev, ship_stub, meta)
     end
     if not (force and force.valid) then force = game.forces["player"] end
 
-    local t = get_threat_level(surface, force, { tech_weight = ev_cfg.tech_influence or 0.4, tech_tiers = ev_cfg.tech_tiers })
+    local t = get_threat_level(surface, force, { tech_weight = ev_cfg.tech_influence or 0.5, tech_tiers = ev_cfg.tech_tiers })
 
     -- scale storm value by threat
     local storm_min = clamp(ev_cfg.storm_min or 20, 0, 100)
