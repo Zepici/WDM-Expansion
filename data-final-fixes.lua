@@ -14,6 +14,38 @@ end
 
 local base_turret = data.raw["electric-turret"]["kj_electric_laser"]
 local base_ammo = data.raw["ammo"]["kj_laser_normal"].ammo_type
+local mini_turret = deepcopy(data.raw["electric-turret"]["kj_electric_laser_player"])
+-- local mini_item = deepcopy(data.raw["item-with-entity-data"]["kj_electric_laser_player"])
+-- local mini_recipe = deepcopy(data.raw["recipe"]["kj_electric_laser_player"])
+
+mini_turret.name = "kj_electric_laser_mini"
+mini_turret.max_health = 3000
+mini_turret.attack_parameters.ammo_type = deepcopy(data.raw["ammo"]["kj_laser_normal"].ammo_type)
+mini_turret.attack_parameters.ammo_type.energy_consumption = "0MJ"
+
+mini_turret.energy_source = {
+    type = "void",
+    emissions_per_minute = {},
+    render_no_network_icon = true,
+    render_no_power_icon = true
+}
+
+-- mini_item.name = "kj_electric_laser_mini"
+-- mini_item.place_result = "kj_electric_laser_mini"
+
+-- mini_recipe.name = "kj_electric_laser_mini"
+-- if mini_recipe.results then
+--     for _, result in pairs(mini_recipe.results) do
+--         if result.name == "kj_electric_laser_player" then
+--             result.name = "kj_electric_laser_mini"
+--         end
+--     end
+-- end
+-- if mini_recipe.result == "kj_electric_laser_player" then
+--     mini_recipe.result = "kj_electric_laser_mini"
+-- end
+
+data:extend({ mini_turret })
 
 for tier = 1, 10 do
     local turret = deepcopy(base_turret)

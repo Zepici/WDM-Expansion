@@ -40,7 +40,7 @@ local DEFAULT_EVENTS = {
         wdm_no_repeat = true,
         wdm_requires_enemies = true,
         wdm_can_be_removed = false,
-        wdm_difficulty_add = 0.0,
+        wdm_difficulty_add = 0.01,
         wdm_alarm = true,
         -- Internal config
         action_name = "spawn_laser_boss_far",
@@ -99,7 +99,7 @@ local DEFAULT_EVENTS = {
         wdm_no_repeat = true,
         wdm_requires_enemies = true,
         wdm_can_be_removed = false,
-        wdm_difficulty_add = 0.0,
+        wdm_difficulty_add = 0.02,
         wdm_alarm = true,
         -- Internal config
         action_name = "crystal_overgrowth",
@@ -135,7 +135,7 @@ if has_active_mod("magnetic-storm") then
         wdm_no_repeat = true,
         wdm_requires_enemies = false,
         wdm_can_be_removed = false,
-        wdm_difficulty_add = 0.0,
+        wdm_difficulty_add = 0.05,
         wdm_alarm = true,
         -- Internal config
         action_name = "electromagnetic_storm",
@@ -702,6 +702,16 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
 
         if ok and boss and boss.valid then
             if boss.energy ~= nil then boss.energy = boss.electric_buffer_size or 0 end
+            pcall(function()
+                surface.create_entity{
+                    name = "solar-panel-explosion",
+                    position = boss.position
+                }
+                surface.create_entity{
+                    name = "solar-panel-explosion",
+                    position = boss.position
+                }
+            end)
             -- localized print with gps ping
             game.print({ "wdm-expansion.laser_boss_spawned", boss.gps_tag })
         else

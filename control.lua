@@ -2,7 +2,7 @@ local planetary_events = require("script.planetary_events")
 local heat_pipes = require("script.heat_pipes")
 local turret_buff = require("script.turret_buff")
 local emergency_return = require("script.emergency_return")
--- local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
+local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
 
 emergency_return.init({
     find_safe_teleport_position = planetary_events.find_safe_teleport_position
@@ -56,23 +56,67 @@ local function register_shared_event_handlers()
 end
 
 local function register_wdm_blueprint_overrides()
-    -- return wdm_blueprints_overrides.register_wdm_blueprint_overrides()
-    return false
+    return wdm_blueprints_overrides.register_wdm_blueprint_overrides()
+end
+
+local function randomize_wdm_blueprint_overrides()
+    return wdm_blueprints_overrides.randomize_wdm_blueprint_overrides()
+end
+
+local function apply_wdm_blueprint_overrides()
+    return wdm_blueprints_overrides.apply_wdm_blueprint_overrides()
 end
 
 local function on_wdm_pirate_ship_spawned(_event)
     register_wdm_blueprint_overrides()
 end
 
+commands.add_command("wdm-refresh-pirate-blueprints", "Re-apply WDM pirate ship blueprint overrides.", function(command)
+    local player = command.player_index and game and game.get_player(command.player_index) or nil
+    local debug_fn = function(message)
+        if player and player.valid then
+            player.print(message)
+        else
+            log(message)
+        end
+    end
+
+    local ok, applied = pcall(function()
+        return register_wdm_blueprint_overrides(debug_fn)
+    end)
+
+    if not ok then
+        local message = "Failed to refresh WDM pirate ship blueprint overrides."
+        if player and player.valid then
+            player.print(message)
+        else
+            log(message)
+        end
+        log("[WDM Expansion] " .. tostring(applied))
+        return
+    end
+
+    local message = applied
+        and "WDM pirate ship blueprint overrides refreshed."
+        or "WDM pirate ship blueprint overrides were not refreshed."
+
+    if player and player.valid then
+        player.print(message)
+        return
+    end
+
+    log(message)
+end)
+
 local function register_wdm_pirate_ship_spawned_handler()
-    -- if not remote.interfaces["WDM"] then return false end
-    -- local ok, event_id = pcall(function()
-    --     return remote.call("WDM", "get_on_pirate_ship_spawned")
-    -- end)
-    -- if ok and event_id then
-    --     script.on_event(event_id, on_wdm_pirate_ship_spawned)
-    --     return true
-    -- end
+    if not remote.interfaces["WDM"] then return false end
+    local ok, event_id = pcall(function()
+        return remote.call("WDM", "get_on_pirate_ship_spawned")
+    end)
+    if ok and event_id then
+        script.on_event(event_id, on_wdm_pirate_ship_spawned)
+        return true
+    end
     return false
 end
 
@@ -87,7 +131,8 @@ script.on_init(function()
     planetary_events.initialize_mod()
     heat_pipes.on_init_or_configuration_changed()
     turret_buff.on_init_or_configuration_changed()
-    register_wdm_blueprint_overrides()
+    randomize_wdm_blueprint_overrides()
+    apply_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()
 end)

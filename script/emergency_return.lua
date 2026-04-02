@@ -39,7 +39,7 @@ local function is_real_tile(surface, position)
     return tile.name ~= "out-of-map"
 end
 
-local BASE_INVENTORY_LOSS_PERCENT = 50
+local BASE_INVENTORY_LOSS_PERCENT = 40
 local LOSS_REDUCTION_PER_QUALITY_LEVEL = 5
 
 local function get_capsule_inventory_loss_percent(quality)

@@ -1,4 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.7
+Date: 2026-04-02
+  Major Features:
+    - Attention all engineers! The ship scanner reports a sharp increase in pirate activity: 10+ new-generation combat spacecraft have entered service. They are already on the hunt, charge your shields and check your weapons! Huge thanks to MFerrari for adding the new interfaces.
+  Features:
+    - Added "Mini" Pirate Laser Cannon
+  Balancing:
+    - When using the Emergency Return capsule, 10% less inventory is now lost.
+    - Events now appear more often depending on the WDM difficulty settings.
+  Graphics:
+    - Added a small effect when the Laser Cannon spawns.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.6
 Date: 2026-03-30
   Bugfixes:
