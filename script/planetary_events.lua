@@ -34,7 +34,7 @@ local DEFAULT_EVENTS = {
     laser_boss = {
         prototype = nil,
         -- WDM planet event parameters
-        wdm_chance = 0.07,
+        wdm_chance = 0.08,
         wdm_min_wap = 40,
         wdm_min_tech_progress = 0.1,
         wdm_no_repeat = true,
@@ -93,7 +93,7 @@ local DEFAULT_EVENTS = {
     ]]
     crystal_overgrowth = {
         -- WDM planet event parameters
-        wdm_chance = 0.05,
+        wdm_chance = 0.06,
         wdm_min_wap = 30,
         wdm_min_tech_progress = 0,
         wdm_no_repeat = true,
@@ -104,10 +104,10 @@ local DEFAULT_EVENTS = {
         -- Internal config
         action_name = "crystal_overgrowth",
         initial_count = 3,
-        growth_count = 4,
+        growth_count = 3,
         growth_interval_seconds = 120,
         ship_exclusion_radius = 60,
-        melee_bonus_per_crystal = 0.05 -- additive per mined crystal
+        enemy_bonus_per_crystal = 0.05 -- additive per mined crystal
     },
     bright_day = {
         -- WDM planet event parameters
@@ -398,6 +398,7 @@ local function init_event_storage()
     storage.crystal_overgrowth_blocked_zones = storage.crystal_overgrowth_blocked_zones or {}
     storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
     storage.enemy_melee_damage_bonus = storage.enemy_melee_damage_bonus or 0
+    storage.enemy_biological_damage_bonus = storage.enemy_biological_damage_bonus or 0
 end
 
 local CRYSTAL_LOW_BONUS = 0.025
@@ -732,6 +733,7 @@ local teleport_player_to_available_deck
 local find_safe_teleport_position
 local spawn_crystals
 local ensure_crystal_tick
+local collect_ship_floor_surfaces_for_force
 
 -- ============================================================
 -- СИСТЕМА ПЛАНИРОВАНИЯ
@@ -975,14 +977,10 @@ ACTIONS.lost_deck = function(surface, ev, ship_stub, meta)
     -- find ship deck surfaces for this force
     local decks = {}
     if force and force.name then
-        for i = 1, 4 do
-            local sname = "ship_interior_" .. i .. "_" .. force.name
-            local s = game.surfaces[sname]
-            if s and s.valid then
-                local lost = storage.lost_decks and storage.lost_decks[s.index]
-                if not (lost and lost.end_tick and game.tick < lost.end_tick) then
-                    table.insert(decks, s)
-                end
+        for _, s in ipairs(collect_ship_floor_surfaces_for_force(force)) do
+            local lost = storage.lost_decks and storage.lost_decks[s.index]
+            if not (lost and lost.end_tick and game.tick < lost.end_tick) then
+                table.insert(decks, s)
             end
         end
     end
@@ -1074,6 +1072,34 @@ local function apply_magnetic_storm_on_surface(surface, storm_value, end_tick, s
 
     apply_storm_disable_on_surface(surface, applied_value)
     return true, applied_value, effective_end_tick
+end
+
+collect_ship_floor_surfaces_for_force = function(force)
+    if not (force and force.valid and force.name and game and game.surfaces) then
+        return {}
+    end
+
+    local prefix = "ship_interior_"
+    local suffix = "_" .. force.name
+    local surfaces = {}
+
+    for _, candidate in pairs(game.surfaces) do
+        if candidate and candidate.valid and candidate.name then
+            local name = candidate.name
+            if string.sub(name, 1, #prefix) == prefix and string.sub(name, -#suffix) == suffix then
+                local deck_id = string.sub(name, #prefix + 1, #name - #suffix)
+                if deck_id == "h" or string.match(deck_id, "^%d+$") then
+                    surfaces[#surfaces + 1] = candidate
+                end
+            end
+        end
+    end
+
+    table.sort(surfaces, function(a, b)
+        return a.name < b.name
+    end)
+
+    return surfaces
 end
 
 ACTIONS.electromagnetic_storm = function(surface, ev, ship_stub, meta)
@@ -1280,33 +1306,42 @@ local function crystal_growth_tick(event)
     end
 end
 
+local function stop_all_crystal_growth()
+    if not storage then return end
+    storage.crystal_overgrowth_active = {}
+    storage.crystal_overgrowth_blocked_zones = {}
+    script.on_nth_tick(storage.crystal_growth_interval or 3600, nil)
+end
+
 ensure_crystal_tick = function()
     storage.crystal_growth_interval = storage.crystal_growth_interval or ((storage.events and storage.events.crystal_overgrowth and storage.events.crystal_overgrowth.growth_interval_seconds) or DEFAULT_EVENTS.crystal_overgrowth.growth_interval_seconds or 60) * 60
     script.on_nth_tick(storage.crystal_growth_interval, crystal_growth_tick)
 end
 
--- Apply melee buff when crystal is mined
+-- Apply melee and biological buffs when crystal is mined
 local function on_crystal_mined(event)
     local entity = event.entity
     if not (entity and entity.valid) then return end
     if entity.name ~= "crystal" then return end
 
     local ev = storage.events and storage.events.crystal_overgrowth or DEFAULT_EVENTS.crystal_overgrowth
-    local bonus = (ev and ev.melee_bonus_per_crystal) or 0.03
+    local bonus = (ev and ev.enemy_bonus_per_crystal) or 0.03
     local bonus_override = take_crystal_bonus_override(entity)
     if type(bonus_override) == "number" then
         bonus = bonus_override
     end
     storage.enemy_melee_damage_bonus = (storage.enemy_melee_damage_bonus or 0) + bonus
+    storage.enemy_biological_damage_bonus = (storage.enemy_biological_damage_bonus or 0) + bonus
 
-    -- Try applying to enemy force using available API hooks (best-effort)
     pcall(function()
         local f = game.forces and game.forces["enemy"]
         if not (f and f.valid) then return end
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("melee", storage.enemy_melee_damage_bonus) end) end
+        if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("biological", storage.enemy_biological_damage_bonus) end) end
     end)
     game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
-    debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus))
+    debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus)
+        .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus))
 end
 
 
@@ -1713,21 +1748,17 @@ teleport_player_to_available_deck = function(player)
     local alt = nil
     local alt_spawn_pos = nil
     if force and force.name then
-        for i = 0, 6 do
-            local sname = "ship_interior_" .. i .. "_" .. force.name
-            local s = game.surfaces[sname]
-            if s and s.valid then
-                local lost = storage.lost_decks and storage.lost_decks[s.index]
-                local is_lost = (lost and lost.end_tick and game.tick < lost.end_tick)
-                -- Never select the deck the player currently stands on.
-                local is_current_deck = current_surface_index and s.index == current_surface_index
-                if not is_lost and not is_current_deck then
-                    local safe_pos = get_valid_spawn_position(s, force)
-                    if safe_pos then
-                        alt = s
-                        alt_spawn_pos = safe_pos
-                        break
-                    end
+        for _, s in ipairs(collect_ship_floor_surfaces_for_force(force)) do
+            local lost = storage.lost_decks and storage.lost_decks[s.index]
+            local is_lost = (lost and lost.end_tick and game.tick < lost.end_tick)
+            -- Never select the deck the player currently stands on.
+            local is_current_deck = current_surface_index and s.index == current_surface_index
+            if not is_lost and not is_current_deck then
+                local safe_pos = get_valid_spawn_position(s, force)
+                if safe_pos then
+                    alt = s
+                    alt_spawn_pos = safe_pos
+                    break
                 end
             end
         end
@@ -1792,6 +1823,10 @@ local function on_ship_warping(event)
     -- event.ship, event.is_going_to_planet, event.destination_surface
     debug("WDM event on_ship_warping fired; ship=" .. tostring(event and event.ship and event.ship.name) ..
           ", to_planet=" .. tostring(event and event.is_going_to_planet))
+    if storage and storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
+        stop_all_crystal_growth()
+        debug("All active crystal growth ended due to ship warp")
+    end
     if has_active_mod("magnetic-storm") then
         -- stop any active storms immediately when a warp happens
         end_all_magnetic_storms()

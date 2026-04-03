@@ -2,8 +2,19 @@ return {
     {
         type = "technology",
         name = "crystal-processing",
-        icon = "__Warp-Drive-Machine-Expansion__/graphics/technology/crystal.png",
-        icon_size = 256,
+        icons = {
+            {
+                icon = "__Warp-Drive-Machine-Expansion__/graphics/technology/crystal.png",
+                icon_size = 256
+            },
+            {
+                icon = "__base__/graphics/icons/signal/signal_1.png",
+                icon_size = 64,
+                scale = 1,
+                shift = {64, -64},
+                priority = "medium"
+            }
+        },
         effects = {
             { type = "unlock-recipe", recipe = "crystal-processing" }
         },
@@ -20,8 +31,19 @@ return {
     {
         type = "technology",
         name = "crystal-processing-t2",
-        icon = "__Warp-Drive-Machine-Expansion__/graphics/technology/crystal.png",
-        icon_size = 256,
+        icons = {
+            {
+                icon = "__Warp-Drive-Machine-Expansion__/graphics/technology/crystal.png",
+                icon_size = 256
+            },
+            {
+                icon = "__base__/graphics/icons/signal/signal_2.png",
+                icon_size = 64,
+                scale = 1,
+                shift = {64, -64},
+                priority = "medium"
+            }
+        },
         effects = {
             { type = "unlock-recipe", recipe = "crystal-processing-t2" }
         },

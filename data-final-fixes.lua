@@ -1,6 +1,33 @@
 local utils = require("utils")
 require("prototypes.entity.turret_buff")
 
+local wdm_difficulty_setting = data.raw["int-setting"] and data.raw["int-setting"]["wdm-difficulty-level"]
+if wdm_difficulty_setting then
+    wdm_difficulty_setting.default_value = 2
+end
+
+local red_refined_concrete = data.raw.item and data.raw.item["red-refined-concrete"]
+if red_refined_concrete then
+    red_refined_concrete.custom_tooltip_fields = red_refined_concrete.custom_tooltip_fields or {}
+    table.insert(red_refined_concrete.custom_tooltip_fields, {
+        value = "",
+        name = {"item-description.wdm-red-refined-concrete-bonus"}
+    })
+end
+
+for level = 1, 6 do
+    local tech = data.raw.technology and data.raw.technology["wdm_external_defense_ship_platform-" .. level]
+    if tech then
+        local base_description = tech.localised_description or {"technology-description.wdm_external_defense_ship_platform"}
+        tech.localised_description = {
+            "",
+            base_description,
+            "\n",
+            {"technology-description.wdm-red-refined-concrete-bonus"}
+        }
+    end
+end
+
 utils.modify_size(data.raw["electric-turret"]["kj_electric_laser"], 2)
 --utils.modify_size(data.raw["electric-turret"]["kj_electric_laser_player"], 1.5)
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.minimum_attack_cycle_duration = 200

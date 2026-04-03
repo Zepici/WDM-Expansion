@@ -35,6 +35,23 @@ local tech = {
 }
 
 if mods["space-age"] then
+    tech["pamk3-esmk3"] = {
+        prerequisites = { "energy-shield-mk2-equipment", "power-armor-mk2", "metallurgic-science-pack" },
+        unit = {
+            count = 750,
+            ingredients = {
+                { "automation-science-pack",      1 },
+                { "logistic-science-pack",        1 },
+                { "chemical-science-pack",        1 },
+                { "military-science-pack",        1 },
+                { "utility-science-pack",         1 },
+                { "space-science-pack",           1 },
+                { "metallurgic-science-pack",     1 },
+                { "electromagnetic-science-pack", 1 }
+            },
+            time = 45
+        }
+    }
     tech["pamk3-se"] = {
         prerequisites = { "pamk3-esmk3", "fusion-reactor-equipment", "battery-mk3-equipment" },
         unit = {

@@ -19,8 +19,11 @@ return {
             {type = "item", name = "uranium-235", amount = 1, probability = 0.1},
             {type = "item", name = "warponium-plate", amount = 10, probability = 0.5},
             {type = "item", name = "stone", amount = 200},
-            {type = "fluid", name = "warponium-fluid", amount = 200},
-            {type = "fluid", name = "crude-oil", amount = 3000}
+            {type = "item", name = "iron-plate", amount = 100},
+            {type = "item", name = "copper-plate", amount = 100},
+            {type = "item", name = "coal", amount = 100},            
+            {type = "fluid", name = "warponium-fluid", amount = 100},
+            {type = "fluid", name = "crude-oil", amount = 3500}
         },
         enabled = false,
         energy_required = 125
@@ -45,10 +48,13 @@ return {
             {type = "item", name = "uranium-235", amount = 1, probability = 0.1},
             {type = "item", name = "warponium-plate", amount = 10, probability = 0.5},
             {type = "item", name = "stone", amount = 200},
+            {type = "item", name = "iron-plate", amount = 100},
+            {type = "item", name = "copper-plate", amount = 100},
+            {type = "item", name = "coal", amount = 100}, 
             {type = "fluid", name = "warponium-fluid", amount = 300},
-            {type = "fluid", name = "crude-oil", amount = 3000}
+            {type = "fluid", name = "crude-oil", amount = 3500}
         },
         enabled = false,
-        energy_required = 125
+        energy_required = 150
     }
 }

@@ -1,4 +1,25 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.10
+Date: 2026-04-03
+  Bugfixes:
+    - A bunch of bug fixes.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.9
+Date: 2026-04-03
+  Bugfixes:
+    - Fixed changelog formatting and text encoding issues.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.8
+Date: 2026-04-03
+  Balancing:
+    - Minor changes to the crystal event and minor changes to the crystal crafting recipe
+  Translation:
+    - The description of Red Refined Concrete has been updated
+    - Changes to the French localization from before this mod was included in the Patch FR des Mods mod
+  Bugfixes:
+    - Fixed technology dependencies and recipes for Warponium personal equipment and Fusion personal reactor
+    - Fixed an issue where only biters received a boost when mining crystals, while spitters did not.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.7
 Date: 2026-04-02
   Major Features:

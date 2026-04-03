@@ -34,7 +34,7 @@ if mods["space-age"] then
             { type = "item", name = "carbon-fiber",              amount = 100 },
             { type = "item", name = "quantum-processor",         amount = 50 },
             { type = "item", name = "fusion-power-cell",         amount = 5 },
-            { type = "item", name = "fission-reactor-equipment", amount = 50 }         
+            { type = "item", name = "fission-reactor-equipment", amount = 1 }         
         }
     }
     recipes["pamk3-se"] = {
@@ -50,8 +50,7 @@ if mods["space-age"] then
     recipes["pamk3-esmk3"] = {
         ingredients = {
             { type = "item", name = "processing-unit",             amount = 50 },
-            { type = "item", name = "tungsten-carbide",            amount = 10 },
-            { type = "item", name = "carbon-fiber",                amount = 10 },
+            { type = "item", name = "tungsten-carbide",            amount = 50 },
             { type = "item", name = "energy-shield-mk2-equipment", amount = 10 },
             { type = "item", name = "warponium-plate",             amount = 20 }
         }

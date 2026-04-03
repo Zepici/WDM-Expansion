@@ -39,6 +39,34 @@ local function is_real_tile(surface, position)
     return tile.name ~= "out-of-map"
 end
 
+local function collect_ship_floor_surfaces_for_force(force)
+    if not (force and force.valid and force.name and game and game.surfaces) then
+        return {}
+    end
+
+    local prefix = "ship_interior_"
+    local suffix = "_" .. force.name
+    local surfaces = {}
+
+    for _, candidate in pairs(game.surfaces) do
+        if candidate and candidate.valid and candidate.name then
+            local name = candidate.name
+            if string.sub(name, 1, #prefix) == prefix and string.sub(name, -#suffix) == suffix then
+                local deck_id = string.sub(name, #prefix + 1, #name - #suffix)
+                if deck_id == "h" or string.match(deck_id, "^%d+$") then
+                    surfaces[#surfaces + 1] = candidate
+                end
+            end
+        end
+    end
+
+    table.sort(surfaces, function(a, b)
+        return a.name < b.name
+    end)
+
+    return surfaces
+end
+
 local BASE_INVENTORY_LOSS_PERCENT = 40
 local LOSS_REDUCTION_PER_QUALITY_LEVEL = 5
 
@@ -75,18 +103,14 @@ function emergency_return.on_player_used_capsule(event)
     local force = player.force
 
     if force and force.name then
-        for i = 0, 6 do
-            local surf_name = "ship_interior_" .. i .. "_" .. force.name
-            local surf = game.surfaces[surf_name]
-            if surf and surf.valid then
-                local lost = storage.lost_decks and storage.lost_decks[surf.index]
-                if not (lost and lost.end_tick and game.tick < lost.end_tick) then
-                    local spawn_pos = force.get_spawn_position(surf)
-                    if spawn_pos and is_real_tile(surf, spawn_pos) then
-                        ship_surface = surf
-                        ship_position = spawn_pos
-                        break
-                    end
+        for _, surf in ipairs(collect_ship_floor_surfaces_for_force(force)) do
+            local lost = storage.lost_decks and storage.lost_decks[surf.index]
+            if not (lost and lost.end_tick and game.tick < lost.end_tick) then
+                local spawn_pos = force.get_spawn_position(surf)
+                if spawn_pos and is_real_tile(surf, spawn_pos) then
+                    ship_surface = surf
+                    ship_position = spawn_pos
+                    break
                 end
             end
         end
@@ -95,18 +119,14 @@ function emergency_return.on_player_used_capsule(event)
             pcall(function()
                 local planet_info = remote.call("WDM", "get_ship_planet_info", force.name)
                 if planet_info then
-                    for i = 0, 6 do
-                        local surf_name = "ship_interior_" .. i .. "_" .. force.name
-                        local surf = game.surfaces[surf_name]
-                        if surf and surf.valid then
-                            local lost = storage.lost_decks and storage.lost_decks[surf.index]
-                            if not (lost and lost.end_tick and game.tick < lost.end_tick) then
-                                local spawn_pos = force.get_spawn_position(surf)
-                                if spawn_pos and is_real_tile(surf, spawn_pos) then
-                                    ship_surface = surf
-                                    ship_position = spawn_pos
-                                    break
-                                end
+                    for _, surf in ipairs(collect_ship_floor_surfaces_for_force(force)) do
+                        local lost = storage.lost_decks and storage.lost_decks[surf.index]
+                        if not (lost and lost.end_tick and game.tick < lost.end_tick) then
+                            local spawn_pos = force.get_spawn_position(surf)
+                            if spawn_pos and is_real_tile(surf, spawn_pos) then
+                                ship_surface = surf
+                                ship_position = spawn_pos
+                                break
                             end
                         end
                     end
