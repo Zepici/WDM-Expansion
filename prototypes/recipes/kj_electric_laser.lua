@@ -6,7 +6,7 @@ local recipes = {
         enabled = false,
         energy_required = 35,
         ingredients = {
-            {type = "fluid", name = "warponium-fluid", amount = 400},
+            {type = "fluid", name = "warponium-fluid", amount = 2000},
             { type = "item", name = "steel-plate", amount = 10 },
             { type = "item", name = "processing-unit",    amount = 20 },
             { type = "item", name = "battery", amount = 20 }
@@ -25,7 +25,7 @@ if mods["space-age"] then
         enabled = false,
         energy_required = 35,
         ingredients = {
-            {type = "fluid", name = "warponium-fluid", amount = 400},
+            {type = "fluid", name = "warponium-fluid", amount = 2000},
             { type = "item", name = "steel-plate", amount = 10 },
             { type = "item", name = "processing-unit",    amount = 20 },
             { type = "item", name = "battery", amount = 20 }

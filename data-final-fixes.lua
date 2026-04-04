@@ -39,11 +39,30 @@ local function deepcopy(orig)
     return table.deepcopy(orig)
 end
 
+local function find_first_damage_amount(node)
+    if type(node) ~= "table" then return nil end
+
+    if node.damage and type(node.damage) == "table" and type(node.damage.amount) == "number" then
+        return node.damage.amount
+    end
+
+    for _, value in pairs(node) do
+        if type(value) == "table" then
+            local amount = find_first_damage_amount(value)
+            if amount then
+                return amount
+            end
+        end
+    end
+end
+
 local base_turret = data.raw["electric-turret"]["kj_electric_laser"]
 local base_ammo = data.raw["ammo"]["kj_laser_normal"].ammo_type
+local base_laser_damage = find_first_damage_amount(base_ammo.action) or 0
+local base_damage_modifier = (base_turret.attack_parameters and base_turret.attack_parameters.damage_modifier) or 1
 local mini_turret = deepcopy(data.raw["electric-turret"]["kj_electric_laser_player"])
--- local mini_item = deepcopy(data.raw["item-with-entity-data"]["kj_electric_laser_player"])
--- local mini_recipe = deepcopy(data.raw["recipe"]["kj_electric_laser_player"])
+local mini_item = deepcopy(data.raw["item-with-entity-data"]["kj_electric_laser_player"])
+local mini_recipe = deepcopy(data.raw["recipe"]["kj_electric_laser_player"])
 
 mini_turret.name = "kj_electric_laser_mini"
 mini_turret.max_health = 3000
@@ -57,26 +76,27 @@ mini_turret.energy_source = {
     render_no_power_icon = true
 }
 
--- mini_item.name = "kj_electric_laser_mini"
--- mini_item.place_result = "kj_electric_laser_mini"
+ mini_item.name = "kj_electric_laser_mini"
+ mini_item.place_result = "kj_electric_laser_mini"
 
--- mini_recipe.name = "kj_electric_laser_mini"
--- if mini_recipe.results then
---     for _, result in pairs(mini_recipe.results) do
---         if result.name == "kj_electric_laser_player" then
---             result.name = "kj_electric_laser_mini"
---         end
---     end
--- end
--- if mini_recipe.result == "kj_electric_laser_player" then
---     mini_recipe.result = "kj_electric_laser_mini"
--- end
+ mini_recipe.name = "kj_electric_laser_mini"
+ if mini_recipe.results then
+     for _, result in pairs(mini_recipe.results) do
+         if result.name == "kj_electric_laser_player" then
+             result.name = "kj_electric_laser_mini"
+         end
+     end
+ end
+ if mini_recipe.result == "kj_electric_laser_player" then
+     mini_recipe.result = "kj_electric_laser_mini"
+ end
 
-data:extend({ mini_turret })
+data:extend({ mini_turret, mini_item })
 
 for tier = 1, 10 do
     local turret = deepcopy(base_turret)
     local ammo = deepcopy(base_ammo)
+    local target_laser_damage = base_laser_damage + (tier * 200)
 
     turret.name = "kj_electric_laser_t" .. tier
     turret.minable = nil -- чтобы игрок не мог разобрать
@@ -90,11 +110,39 @@ for tier = 1, 10 do
     turret.attack_parameters.ammo_type = ammo
 
     -- сила лазера (урон)
-    ammo.action.action_delivery.target_effects[1].damage.amount =
-    ammo.action.action_delivery.target_effects[1].damage.amount + (tier * 200)
+    if base_laser_damage > 0 then
+        turret.attack_parameters.damage_modifier = base_damage_modifier * (target_laser_damage / base_laser_damage)
+    end
     data:extend({ turret })
 end
 
+local tesla_turret = data.raw["electric-turret"] and data.raw["electric-turret"]["tesla-turret"]
+
+if mods["space-age"]
+    and tesla_turret
+    and tesla_turret.attack_parameters
+    and tesla_turret.attack_parameters.ammo_type
+    and tesla_turret.attack_parameters.ammo_type.action then
+    for tier = 1, 10 do
+        local base_name = "kj_electric_laser_t" .. tier
+        local base_variant = data.raw["electric-turret"][base_name]
+        if base_variant and base_variant.attack_parameters and base_variant.attack_parameters.ammo_type then
+            local elite = deepcopy(base_variant)
+            elite.name = base_name .. "_tesla"
+            elite.localised_name = {"entity-name." .. base_name}
+            elite.localised_description = {"entity-description." .. base_name}
+            elite.attack_parameters.range = math.max(
+                elite.attack_parameters.range or 0,
+                tesla_turret.attack_parameters.range or 0
+            )
+            elite.attack_parameters.ammo_type.action = {
+                deepcopy(base_variant.attack_parameters.ammo_type.action),
+                deepcopy(tesla_turret.attack_parameters.ammo_type.action)
+            }
+            data:extend({ elite })
+        end
+    end
+end
 -- Настройка спавнеров зомби
 if settings.startup["wdm-expansion-zombie"] and settings.startup["wdm-expansion-zombie"].value then
     local unit_spawner = data.raw["unit-spawner"]["biter-zombie-spawner"]

@@ -1,8 +1,22 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.11
+Date: 2026-04-04
+  Bugfixes:
+    - Fixed some pirate ships.
+    - Pirate mechanic event spawn patterns have been expanded.
+    - Fixed possible multiplayer desync issues.
+  Changes:
+    - Improved the logic for selecting pirate ships for spawning.
+    - Crystal bonuses are no longer permanent.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.10
 Date: 2026-04-03
   Bugfixes:
-    - A bunch of bug fixes.
+    - Fixed the magnetic storm event.
+    - Fixed crystal spawning after the event ends.
+  Balancing:
+    - Adjusted the chances of some events.
+    - Adjusted the crystal recipe.
 ---------------------------------------------------------------------------------------------------
 Version: 0.1.9
 Date: 2026-04-03

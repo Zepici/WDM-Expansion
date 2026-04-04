@@ -4,6 +4,7 @@ local util = require("util")
 local function has_active_mod(mod_name)
     return script and script.active_mods and script.active_mods[mod_name] ~= nil
 end
+local HAS_SPACE_AGE = has_active_mod("space-age")
 
 -- ============================================================
 -- КОНСТАНТЫ И КОНФИГУРАЦИЯ
@@ -34,9 +35,9 @@ local DEFAULT_EVENTS = {
     laser_boss = {
         prototype = nil,
         -- WDM planet event parameters
-        wdm_chance = 0.08,
-        wdm_min_wap = 40,
-        wdm_min_tech_progress = 0.1,
+        wdm_chance = 1,
+        wdm_min_wap = 4,
+        wdm_min_tech_progress = 0,
         wdm_no_repeat = true,
         wdm_requires_enemies = true,
         wdm_can_be_removed = false,
@@ -45,10 +46,15 @@ local DEFAULT_EVENTS = {
         -- Internal config
         action_name = "spawn_laser_boss_far",
         spawn_count = 1,
-        spawn_opts = { min_dist = 50, max_dist = 250, spacing = 100 },
+        spawn_opts = {
+            min_dist = 50,
+            max_dist = 250,
+            spacing = 100,
+            elite_chance = HAS_SPACE_AGE and 0.2 or 0
+        },
         waves = { min = 1, max = 3 },
-        wave_min_delay_seconds = 20,
-        wave_max_delay_seconds = 40,
+        wave_min_delay_seconds = 30,
+        wave_max_delay_seconds = 120,
         tech_influence = 0.5,
         tech_tiers = nil
     },
@@ -451,7 +457,7 @@ end
 -- DRUZHESTVENNYI URON (FRIENDLY FIRE) ДЛЯ СИЛ
 -- ============================================================
 
-local FRIENDLY_FIRE_FORCES = { "player", "enemy", "pirate" }
+local FRIENDLY_FIRE_FORCES = { "enemy", "pirate" }
 
 local function apply_friendly_fire_setting()
     if not game or not game.forces then return end
@@ -681,6 +687,13 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
     local base_pos = (ship and ship.position) or { x = 0, y = 0 }
 
     for i = 1, count do
+        local spawn_prototype = prototype
+        local elite_chance = HAS_SPACE_AGE and (opts.elite_chance or 0) or 0
+        local elite_prototype = prototype .. "_tesla"
+        if elite_chance > 0 and math.random() < elite_chance and prototypes.entity[elite_prototype] then
+            spawn_prototype = elite_prototype
+        end
+
         local min_dist = opts.min_dist or 100
         local max_dist = opts.max_dist or 200
         local radial_offset = (i - 1) * (opts.spacing or 60)
@@ -688,13 +701,13 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
         if not pos then pos = base_pos end
 
         if surface.find_non_colliding_position then
-            local safe = surface.find_non_colliding_position(prototype, pos, 8, 0.5, false)
+            local safe = surface.find_non_colliding_position(spawn_prototype, pos, 8, 0.5, false)
             if safe then pos = safe end
         end
 
         local ok, boss = pcall(function()
             return surface.create_entity{
-                name = prototype,
+                name = spawn_prototype,
                 position = pos,
                 force = game.forces.enemy,
                 create_build_effect_smoke = false
@@ -716,7 +729,7 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
             -- localized print with gps ping
             game.print({ "wdm-expansion.laser_boss_spawned", boss.gps_tag })
         else
-            debug("Failed to create boss entity at (" .. tostring(pos.x) .. "," .. tostring(pos.y) .. ") (ok=" .. tostring(ok) .. ") prototype=" .. tostring(prototype))
+            debug("Failed to create boss entity at (" .. tostring(pos.x) .. "," .. tostring(pos.y) .. ") (ok=" .. tostring(ok) .. ") prototype=" .. tostring(spawn_prototype))
         end
     end
 end
@@ -847,6 +860,7 @@ ACTIONS.spawn_laser_boss_far = function(surface, ev, ship_stub, meta)
     local tier = math.floor(t.threat * 9) + 1
     tier = math.max(1, math.min(10, tier))
     local prototype_name = "kj_electric_laser_t" .. tostring(tier)
+    opts.elite_chance = HAS_SPACE_AGE and (opts.elite_chance or 0) or 0
 
     -- wave index and dynamic spawn_count
     local wave_index = 1
@@ -897,6 +911,9 @@ ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
 
     local ev_cfg = ev or DEFAULT_EVENTS.earthquake
     local base_speed_reduction = ev_cfg.speed_reduction
+    if has_active_mod("RPGsystem") then
+        base_speed_reduction = -0.6
+    end
     local base_duration = ev_cfg.duration_seconds
 
     -- determine force/context for threat calculation
@@ -1333,15 +1350,19 @@ local function on_crystal_mined(event)
     storage.enemy_melee_damage_bonus = (storage.enemy_melee_damage_bonus or 0) + bonus
     storage.enemy_biological_damage_bonus = (storage.enemy_biological_damage_bonus or 0) + bonus
 
+    apply_enemy_damage_bonuses()
+    game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
+    debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus)
+        .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus))
+end
+
+local function apply_enemy_damage_bonuses()
     pcall(function()
         local f = game.forces and game.forces["enemy"]
         if not (f and f.valid) then return end
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("melee", storage.enemy_melee_damage_bonus) end) end
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("biological", storage.enemy_biological_damage_bonus) end) end
     end)
-    game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
-    debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus)
-        .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus))
 end
 
 
@@ -1823,6 +1844,33 @@ local function on_ship_warping(event)
     -- event.ship, event.is_going_to_planet, event.destination_surface
     debug("WDM event on_ship_warping fired; ship=" .. tostring(event and event.ship and event.ship.name) ..
           ", to_planet=" .. tostring(event and event.is_going_to_planet))
+
+    local old_melee_bonus = storage.enemy_melee_damage_bonus or 0
+    local old_biological_bonus = storage.enemy_biological_damage_bonus or 0
+    local new_melee_bonus = old_melee_bonus
+    local new_biological_bonus = old_biological_bonus
+
+    if old_melee_bonus > 0 then
+        new_melee_bonus = math.max(0, old_melee_bonus - 0,005)
+    end
+    if old_biological_bonus > 0 then
+        new_biological_bonus = math.max(0, old_biological_bonus - 0,005)
+    end
+
+    if new_melee_bonus ~= old_melee_bonus or new_biological_bonus ~= old_biological_bonus then
+        storage.enemy_melee_damage_bonus = new_melee_bonus
+        storage.enemy_biological_damage_bonus = new_biological_bonus
+        apply_enemy_damage_bonuses()
+        debug("Ship warp reduced enemy bonuses: melee "
+            .. string.format("%.3f", old_melee_bonus) .. " -> " .. string.format("%.3f", new_melee_bonus)
+            .. ", biological "
+            .. string.format("%.3f", old_biological_bonus) .. " -> " .. string.format("%.3f", new_biological_bonus))
+    else
+        debug("Ship warp left enemy bonuses unchanged: melee="
+            .. string.format("%.3f", old_melee_bonus)
+            .. ", biological=" .. string.format("%.3f", old_biological_bonus))
+    end
+
     if storage and storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
         stop_all_crystal_growth()
         debug("All active crystal growth ended due to ship warp")
@@ -1883,12 +1931,16 @@ local function register_wdm_custom_planet_event()
 end
 
 -- Функция для регистрации обработчиков без изменения storage (для on_load)
-local function register_event_handlers()
+local function register_event_handlers(opts)
+    local options = opts or {}
+    local allow_wdm_state_changes = options.allow_wdm_state_changes == true
     -- Обработчик экстренного возврата всегда активен, независимо от состояния мода
 
     if is_mod_enabled() then
         -- Регистрируем события в WDM
-        register_wdm_planet_events()
+        if allow_wdm_state_changes then
+            register_wdm_planet_events()
+        end
 
         -- Регистрируем обработчики различных событий WDM
         register_wdm_custom_planet_event()
@@ -1928,7 +1980,7 @@ end
 local function initialize_mod()
     init_event_storage()
     sync_default_events()
-    register_event_handlers()
+    register_event_handlers({allow_wdm_state_changes = true})
     if storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
         ensure_crystal_tick()
     end
