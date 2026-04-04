@@ -35,9 +35,9 @@ local DEFAULT_EVENTS = {
     laser_boss = {
         prototype = nil,
         -- WDM planet event parameters
-        wdm_chance = 1,
-        wdm_min_wap = 4,
-        wdm_min_tech_progress = 0,
+        wdm_chance = 0.08,
+        wdm_min_wap = 40,
+        wdm_min_tech_progress = 0.1,
         wdm_no_repeat = true,
         wdm_requires_enemies = true,
         wdm_can_be_removed = false,
@@ -47,7 +47,7 @@ local DEFAULT_EVENTS = {
         action_name = "spawn_laser_boss_far",
         spawn_count = 1,
         spawn_opts = {
-            min_dist = 50,
+            min_dist = 70,
             max_dist = 250,
             spacing = 100,
             elite_chance = HAS_SPACE_AGE and 0.2 or 0
@@ -186,6 +186,15 @@ local function debug(msg)
     end
 end
 
+local function apply_turret_delay(entity, delay_seconds)
+    if not (entity and entity.valid) then return end
+    if not (remote and remote.interfaces and remote.interfaces["Turret_Delay"]) then return end
+
+    pcall(function()
+        remote.call("Turret_Delay", "entity_delay_activation", entity, delay_seconds)
+    end)
+end
+
 local function table_size(t)
     if not t then return 0 end
     local cnt = 0
@@ -202,6 +211,25 @@ local function clamp(value, min_value, max_value)
     if value < min_value then return min_value end
     if value > max_value then return max_value end
     return value
+end
+
+local function is_non_water_tile(surface, position)
+    if not (surface and surface.valid and position) then return false end
+
+    local ok, tile = pcall(function()
+        return surface.get_tile(position)
+    end)
+    if not (ok and tile and tile.valid and tile.name) then return false end
+    if tile.name == "out-of-map" then return false end
+
+    local collides_ok, is_water = pcall(function()
+        return tile.collides_with("water-tile")
+    end)
+    if collides_ok then
+        return not is_water
+    end
+
+    return not string.find(tile.name, "water", 1, true)
 end
 
 local function get_magnetic_storm_value(surface)
@@ -592,7 +620,7 @@ end
 -- ПОИСК ПОЗИЦИЙ
 -- ============================================================
 
-local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist)
+local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist, prototype)
     if not (ship and ship.position) then return { x = 0, y = 0 } end
     if not (surface and surface.valid) then return ship.position end
 
@@ -600,16 +628,36 @@ local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist)
     local station_pos = ship.active_space_station and ship.active_space_station.position
     local attempts = 0
     local pos, valid
-    while not valid and attempts < 40 do
+    while not valid and attempts < 60 do
         attempts = attempts + 1
         local angle = math.random() * math.pi * 2
         local dist = math.random(min_dist, max_dist)
         local x = base_pos.x + math.cos(angle) * dist
         local y = base_pos.y + math.sin(angle) * dist
         pos = { x = x, y = y }
-        valid = (not station_pos) or distance(pos, station_pos) > 90
+
+        if prototype and surface.find_non_colliding_position then
+            local safe = surface.find_non_colliding_position(prototype, pos, 16, 0.5, false)
+            if safe then pos = safe end
+        end
+
+        valid = ((not station_pos) or distance(pos, station_pos) > 90) and is_non_water_tile(surface, pos)
     end
-    return pos or base_pos
+
+    if valid then return pos end
+
+    if prototype and surface.find_non_colliding_position then
+        local fallback = surface.find_non_colliding_position(prototype, base_pos, 64, 0.5, false)
+        if fallback and is_non_water_tile(surface, fallback) then
+            return fallback
+        end
+    end
+
+    if is_non_water_tile(surface, base_pos) then
+        return base_pos
+    end
+
+    return nil
 end
 
 -- ============================================================
@@ -697,12 +745,20 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
         local min_dist = opts.min_dist or 100
         local max_dist = opts.max_dist or 200
         local radial_offset = (i - 1) * (opts.spacing or 60)
-        local pos = find_spawn_position_near_ship(ship, surface, min_dist + radial_offset, max_dist + radial_offset)
-        if not pos then pos = base_pos end
+        local pos = find_spawn_position_near_ship(ship, surface, min_dist + radial_offset, max_dist + radial_offset, spawn_prototype)
+        if not pos then
+            debug("Failed to find non-water spawn position for prototype=" .. tostring(spawn_prototype))
+            pos = base_pos
+        end
 
         if surface.find_non_colliding_position then
             local safe = surface.find_non_colliding_position(spawn_prototype, pos, 8, 0.5, false)
-            if safe then pos = safe end
+            if safe and is_non_water_tile(surface, safe) then pos = safe end
+        end
+
+        if not is_non_water_tile(surface, pos) then
+            debug("Skipped laser boss spawn on invalid tile for prototype=" .. tostring(spawn_prototype))
+            goto continue
         end
 
         local ok, boss = pcall(function()
@@ -716,6 +772,7 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
 
         if ok and boss and boss.valid then
             if boss.energy ~= nil then boss.energy = boss.electric_buffer_size or 0 end
+            apply_turret_delay(boss, 10)
             pcall(function()
                 surface.create_entity{
                     name = "solar-panel-explosion",
@@ -731,6 +788,8 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
         else
             debug("Failed to create boss entity at (" .. tostring(pos.x) .. "," .. tostring(pos.y) .. ") (ok=" .. tostring(ok) .. ") prototype=" .. tostring(spawn_prototype))
         end
+
+        ::continue::
     end
 end
 
@@ -1350,7 +1409,12 @@ local function on_crystal_mined(event)
     storage.enemy_melee_damage_bonus = (storage.enemy_melee_damage_bonus or 0) + bonus
     storage.enemy_biological_damage_bonus = (storage.enemy_biological_damage_bonus or 0) + bonus
 
-    apply_enemy_damage_bonuses()
+    pcall(function()
+        local f = game.forces and game.forces["enemy"]
+        if not (f and f.valid) then return end
+        if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("melee", storage.enemy_melee_damage_bonus) end) end
+        if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("biological", storage.enemy_biological_damage_bonus) end) end
+    end)
     game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
     debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus)
         .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus))
@@ -1851,10 +1915,10 @@ local function on_ship_warping(event)
     local new_biological_bonus = old_biological_bonus
 
     if old_melee_bonus > 0 then
-        new_melee_bonus = math.max(0, old_melee_bonus - 0,005)
+        new_melee_bonus = math.max(0, old_melee_bonus - 0.005)
     end
     if old_biological_bonus > 0 then
-        new_biological_bonus = math.max(0, old_biological_bonus - 0,005)
+        new_biological_bonus = math.max(0, old_biological_bonus - 0.005)
     end
 
     if new_melee_bonus ~= old_melee_bonus or new_biological_bonus ~= old_biological_bonus then
@@ -1931,16 +1995,12 @@ local function register_wdm_custom_planet_event()
 end
 
 -- Функция для регистрации обработчиков без изменения storage (для on_load)
-local function register_event_handlers(opts)
-    local options = opts or {}
-    local allow_wdm_state_changes = options.allow_wdm_state_changes == true
+local function register_event_handlers()
     -- Обработчик экстренного возврата всегда активен, независимо от состояния мода
 
     if is_mod_enabled() then
         -- Регистрируем события в WDM
-        if allow_wdm_state_changes then
-            register_wdm_planet_events()
-        end
+        register_wdm_planet_events()
 
         -- Регистрируем обработчики различных событий WDM
         register_wdm_custom_planet_event()
@@ -1980,7 +2040,7 @@ end
 local function initialize_mod()
     init_event_storage()
     sync_default_events()
-    register_event_handlers({allow_wdm_state_changes = true})
+    register_event_handlers()
     if storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
         ensure_crystal_tick()
     end

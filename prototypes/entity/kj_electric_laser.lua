@@ -14,7 +14,7 @@ return {
         minable = { result = "kj_electric_laser" },
         rotation_speed = 0.005,
         turret_base_has_direction = true,
-        prepare_range = 85,
+        prepare_range = 70,
         collision_box = { { -1.2, -1.2 }, { 1.2, 1.2 } },
         loot = data.raw.unit["maf-boss-biter-1"].loot,     
         attack_parameters = {
@@ -70,10 +70,10 @@ return {
             drain = "1MW"
         },
         max_health = 2500,
-        minable = { result = "kj_electric_laser" },
+        minable = { result = "kj_electric_laser_player" },
         rotation_speed = 0.005,
         turret_base_has_direction = true,
-        prepare_range = 50,
+        prepare_range = 40,
         collision_box = { { -1.2, -1.2 }, { 1.2, 1.2 } },
 
         attack_parameters = {
@@ -81,7 +81,7 @@ return {
             projectile_creation_distance = 0,
             damage_modifier = 0.2,
             min_range = 0,
-            range = 50,
+            range = 40,
             rotate_penalty = 0,
             turn_range = 0.25,
             ammo_type = {

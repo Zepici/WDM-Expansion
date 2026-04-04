@@ -1,4 +1,20 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.12
+Date: 2026-04-04
+  Ease of use:
+    - Added support for copying turrets placed on red refined concrete.
+  Changes:
+    - Laser boss turrets now receive a 10-second activation delay on spawn.
+    - Crystal bonuses now decay by 0.005 on each warp again.
+  Balancing:
+    - Increased the minimum spawn distance of the laser boss event from 50 to 70 tiles.
+    - Reduced the prepare range of the main pirate laser turret from 85 to 70.
+    - Reduced the range and prepare range of the player laser turret from 50 to 40.
+  Bugfixes:
+    - Laser boss turrets can no longer spawn on water.
+    - Restored crystal bonus application and the crystal harvested message while keeping warp-based decay.
+    - Fixed the mining result of the player laser turret to return the correct item.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.11
 Date: 2026-04-04
   Bugfixes:

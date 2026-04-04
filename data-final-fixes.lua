@@ -1,5 +1,6 @@
 local utils = require("utils")
 require("prototypes.entity.turret_buff")
+utils.add_data(require("prototypes.items.turret_buff"))
 
 local wdm_difficulty_setting = data.raw["int-setting"] and data.raw["int-setting"]["wdm-difficulty-level"]
 if wdm_difficulty_setting then
@@ -68,7 +69,8 @@ mini_turret.name = "kj_electric_laser_mini"
 mini_turret.max_health = 3000
 mini_turret.attack_parameters.ammo_type = deepcopy(data.raw["ammo"]["kj_laser_normal"].ammo_type)
 mini_turret.attack_parameters.ammo_type.energy_consumption = "0MJ"
-
+mini_turret.attack_parameters.range = 50
+mini_turret.prepare_range = 50
 mini_turret.energy_source = {
     type = "void",
     emissions_per_minute = {},
@@ -96,7 +98,7 @@ data:extend({ mini_turret, mini_item })
 for tier = 1, 10 do
     local turret = deepcopy(base_turret)
     local ammo = deepcopy(base_ammo)
-    local target_laser_damage = base_laser_damage + (tier * 200)
+    local target_laser_damage = base_laser_damage + (tier * 220)
 
     turret.name = "kj_electric_laser_t" .. tier
     turret.minable = nil -- чтобы игрок не мог разобрать
