@@ -17,7 +17,7 @@ data:extend({
     type = "bool-setting",
     name = "wdm-expansion-disable-friendly-fire",
     setting_type = "runtime-global",
-    default_value = false,
+    default_value = true,
     order = "c"
   },
   {

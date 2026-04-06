@@ -1,8 +1,21 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.16
+Date: 2026-04-06
+  Changes:
+    - Fixed the recipe group for Exocine crystal processing recipes.
+    - Set the default value of the friendly fire disable setting to true.
+    - Improved some pirate ships.
+  Translation:
+    - Fixed a minor English localization issue for the Warponium exoskeleton.
+  Balancing:
+    - Increased the amount of warponium used in Warponium weaponry.
+  Sounds:
+    - Reduced the volume of the Magnetic Storm state change sound slightly.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.15
 Date: 2026-04-05
   Bugfixes:
-    - Fixed command 
+    - Fixed command.
 ---------------------------------------------------------------------------------------------------
 Version: 0.1.14
 Date: 2026-04-05

@@ -1,7 +1,9 @@
 {
   "name": "Warp-Drive-Machine-Expansion",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "title": "Warp Drive Machine Expansion",
+  "description": "Global expansion for the Warp-Drive-Machine! New events, unique weapons, reworked mechanics, and improved performance. Make your hyperspace travels deeper, more dangerous, and more exciting! Under development and may be unstable.",
+  "homepage":"https://discord.gg/afNVt4zWzS",
   "author": "ZepCannon",
   "factorio_version": "2.0",
   "dependencies": [
@@ -12,6 +14,5 @@
     "? space-age",
     "? ZombieHordeFaction",
     "? magnetic-storm"
-  ],
-  "description": "Global expansion for the Warp-Drive-Machine! New events, unique weapons, reworked mechanics, and improved performance. Make your hyperspace travels deeper, more dangerous, and more exciting! Under development and may be unstable."
+  ]
 }

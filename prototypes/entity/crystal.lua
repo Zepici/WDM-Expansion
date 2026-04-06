@@ -15,7 +15,7 @@ return {
     animations = {
       filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/crystal.png",
       tint = {r=1, g=0.2, b=0.6, a=1},
-      priority = "low",
+      priority = "medium",
       width = 128,
       height = 128,
       scale = 1,

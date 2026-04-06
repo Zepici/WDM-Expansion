@@ -7,7 +7,7 @@ end
 local HAS_SPACE_AGE = has_active_mod("space-age")
 
 -- ============================================================
--- РљРћРќРЎРўРђРќРўР« Р РљРћРќР¤РР“РЈР РђР¦РРЇ
+-- КОНСТАНТЫ И КОНФИГУРАЦИЯ
 -- ============================================================
 
 local DEFAULT_TECH_TIERS
@@ -30,7 +30,7 @@ else
     }
 end
 
--- РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ СЃРѕР±С‹С‚РёР№ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
+-- Конфигурация событий по умолчанию
 local DEFAULT_EVENTS = {
     laser_boss = {
         prototype = nil,
@@ -153,7 +153,7 @@ if has_active_mod("magnetic-storm") then
 end
 
 -- ============================================================
--- РЈРўРР›РРўР« Р Р’РЎРџРћРњРћР“РђРўР•Р›Р¬РќР«Р• Р¤РЈРќРљР¦РР
+-- УТИЛИТЫ И ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 -- ============================================================
 
 local function is_mod_enabled()
@@ -636,7 +636,7 @@ local function take_crystal_bonus_override(entity)
 end
 
 -- ============================================================
--- DRUZHESTVENNYI URON (FRIENDLY FIRE) Р”Р›РЇ РЎРР›
+-- DRUZHESTVENNYI URON (FRIENDLY FIRE) ДЛЯ СИЛ
 -- ============================================================
 
 local FRIENDLY_FIRE_FORCES = { "enemy", "pirate" }
@@ -649,14 +649,14 @@ local function apply_friendly_fire_setting()
     for _, name in ipairs(FRIENDLY_FIRE_FORCES) do
         local force = game.forces[name]
         if force and force.valid and force.friendly_fire ~= nil then
-            -- Р•СЃР»Рё РЅР°СЃС‚СЂРѕР№РєР° РІРєР»СЋС‡РµРЅР° вЂ“ РѕС‚РєР»СЋС‡Р°РµРј РґСЂСѓР¶РµСЃС‚РІРµРЅРЅС‹Р№ СѓСЂРѕРЅ,
-            -- РёРЅР°С‡Рµ РІРѕР·РІСЂР°С‰Р°РµРј РґРµС„РѕР»С‚РЅРѕРµ РїРѕРІРµРґРµРЅРёРµ (СЂР°Р·СЂРµС€Р°РµРј).
+            -- Если настройка включена - отключаем дружественный урон,
+            -- иначе возвращаем дефолтное поведение (разрешаем).
             force.friendly_fire = not disable
         end
     end
 end
 
--- WAP С‚РµРїРµСЂСЊ СѓРїСЂР°РІР»СЏРµС‚СЃСЏ WDM, РЅРµ РЅСѓР¶РЅС‹ Р»РѕРєР°Р»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё
+-- WAP теперь управляется WDM, не нужны локальные функции
 
 local function sync_default_events()
     storage.events = storage.events or {}
@@ -672,7 +672,7 @@ local function sync_default_events()
     end
 end
 
--- Р РµРіРёСЃС‚СЂР°С†РёСЏ СЃРѕР±С‹С‚РёР№ РІ WDM С‡РµСЂРµР· add_custom_planet_event
+-- Регистрация событий в WDM через add_custom_planet_event
 local function register_wdm_planet_events()
     if not remote.interfaces["WDM"] then
         debug("WDM interface not found, cannot register planet events")
@@ -771,7 +771,7 @@ local function get_threat_level(surface, force, opts)
 end
 
 -- ============================================================
--- РџРћРРЎРљ РџРћР—РР¦РР™
+-- ПОИСК ПОЗИЦИЙ
 -- ============================================================
 
 local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist, prototype)
@@ -815,7 +815,7 @@ local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist, 
 end
 
 -- ============================================================
--- РЎРџРђР’Рќ РЎРЈР©РќРћРЎРўР•Р™ (helper)
+-- СПАВН СУЩНОСТЕЙ (helper)
 -- ============================================================
 --[[
 local function spawn_pirate_base(ship, surface)
@@ -949,7 +949,7 @@ end
 
 
 -- ============================================================
--- ACTIONS (РґРµР№СЃС‚РІРёСЏ СЃРѕР±С‹С‚РёР№) - РѕР±СЉСЏРІР»СЏРµРј Р·Р°СЂР°РЅРµРµ
+-- ACTIONS (действия событий) - объявляем заранее
 -- ============================================================
 
 local ACTIONS = {}
@@ -962,10 +962,10 @@ local ensure_crystal_tick
 local collect_ship_floor_surfaces_for_force
 
 -- ============================================================
--- РЎРРЎРўР•РњРђ РџР›РђРќРР РћР’РђРќРРЇ
+-- СИСТЕМА ПЛАНИРОВАНИЯ
 -- ============================================================
 
--- РћР±СЉСЏРІР»СЏРµРј С„СѓРЅРєС†РёСЋ Р·Р°СЂР°РЅРµРµ, РѕРїСЂРµРґРµР»РµРЅРёРµ Р±СѓРґРµС‚ РЅРёР¶Рµ
+-- Объявляем функцию заранее, определение будет ниже
 local update_tick_handlers
 
 local function schedule_event_for_tick(name, ship, surface, delay, meta)
@@ -982,14 +982,14 @@ local function schedule_event_for_tick(name, ship, surface, delay, meta)
         ship_info = ship_info,
         meta = meta
     })
-    -- Р’РєР»СЋС‡Р°РµРј on_tick РєРѕРіРґР° РґРѕР±Р°РІР»СЏРµРј СЃРѕР±С‹С‚РёРµ
+    -- Включаем on_tick когда добавляем событие
     if update_tick_handlers then
         update_tick_handlers()
     end
 end
 
--- РћР±СЂР°Р±РѕС‚РєР° СЃРѕР±С‹С‚РёСЏ РєРѕРіРґР° РїР»Р°РЅРµС‚Р° СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅР° СЃ РЅР°С€РёРј СЃРѕР±С‹С‚РёРµРј
--- Р’С‹Р·С‹РІР°РµС‚СЃСЏ С‡РµСЂРµР· on_custom_planet_event РёР· WDM
+-- Обработка события когда планета сгенерирована с нашим событием
+-- Вызывается через on_custom_planet_event из WDM
 local function handle_custom_planet_event(event_name, ship, surface)
     local ev = storage.events and storage.events[event_name] or DEFAULT_EVENTS[event_name]
     if not ev then
@@ -999,7 +999,7 @@ local function handle_custom_planet_event(event_name, ship, surface)
 
     debug("Handling custom planet event: " .. event_name .. " on surface " .. tostring(surface and surface.name))
 
-    -- РЎРѕР·РґР°РµРј ship_stub РґР»СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё СЃ ACTIONS
+    -- Создаем ship_stub для совместимости с ACTIONS
     local ship_stub = {
         position = ship.position,
         force = ship.force,
@@ -1018,7 +1018,7 @@ local function handle_custom_planet_event(event_name, ship, surface)
         return
     end
 
-    -- Р”Р»СЏ laser_boss РґРѕР±Р°РІР»СЏРµРј Р·Р°РґРµСЂР¶РєСѓ Рё РІРѕР»РЅС‹
+    -- Для laser_boss добавляем задержку и волны
     local meta = nil
     if event_name == "laser_boss" then
         local seconds = math.random(60, 120)
@@ -1043,19 +1043,19 @@ local function handle_custom_planet_event(event_name, ship, surface)
             tech_tiers = ev.tech_tiers
         }
 
-        -- Р—Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ РїРµСЂРІСѓСЋ РІРѕР»РЅСѓ СЃ Р·Р°РґРµСЂР¶РєРѕР№
+        -- Запланировать первую волну с задержкой
         schedule_event_for_tick(event_name, ship_stub, surface, delay_ticks, meta)
         return
     end
 
-    -- Р”Р»СЏ РґСЂСѓРіРёС… СЃРѕР±С‹С‚РёР№ (earthquake) РІС‹РїРѕР»РЅСЏРµРј СЃСЂР°Р·Сѓ
+    -- Для других событий (earthquake) выполняем сразу
     local ok, err = pcall(action, surface, ev, ship_stub, meta)
     if not ok then
         debug("Error executing action for event '" .. event_name .. "': " .. tostring(err))
     end
 end
 
--- ACTION: РЎРїР°РІРЅ Р»Р°Р·РµСЂРЅРѕРіРѕ Р±РѕСЃСЃР° (РёСЃРїРѕР»СЊР·СѓРµС‚ unified threat level)
+-- ACTION: Спавн лазерного босса (использует unified threat level)
 ACTIONS.spawn_laser_boss_far = function(surface, ev, ship_stub, meta)
     local base_count = ev.spawn_count or ev.count or 1
     local opts = ev.spawn_opts or {}
@@ -1118,7 +1118,7 @@ ACTIONS.spawn_pirate_base = function(surface, ev, ship_stub)
     spawn_pirate_base(ship_stub, surface)
 end
 ]]
--- ACTION: Р—РµРјР»РµС‚СЂСЏСЃРµРЅРёРµ - СЃРЅРёР¶Р°РµС‚ СЃРєРѕСЂРѕСЃС‚СЊ С…РѕРґСЊР±С‹ РІСЃРµС… РёРіСЂРѕРєРѕРІ РЅР° РїРѕРІРµСЂС…РЅРѕСЃС‚Рё
+-- ACTION: Землетрясение - снижает скорость ходьбы всех игроков на поверхности
 ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
     if not (surface and surface.valid) then return end
 
@@ -1160,7 +1160,7 @@ ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
     }
     storage.active_earthquakes[surface_index] = eq_data
 
-    -- Р’РєР»СЋС‡Р°РµРј on_nth_tick РґР»СЏ РїСЂРѕРІРµСЂРєРё Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№
+    -- Включаем on_nth_tick для проверки землетрясений
     if update_tick_handlers then
         update_tick_handlers()
     end
@@ -1747,7 +1747,7 @@ local function end_earthquake(surface_index)
 
     storage.active_earthquakes[surface_index] = nil
     
-    -- РћС‚РєР»СЋС‡Р°РµРј on_nth_tick РµСЃР»Рё Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№ Р±РѕР»СЊС€Рµ РЅРµС‚
+    -- Отключаем on_nth_tick если землетрясений больше нет
     if update_tick_handlers then
         update_tick_handlers()
     end
@@ -1818,16 +1818,16 @@ local function restore_player_speed_on_surface_change(player_index, old_surface_
 end
 
 -- ============================================================
--- РћР‘Р РђР‘РћРўР§РРљР FACTORIO
+-- ОБРАБОТЧИКИ FACTORIO
 -- ============================================================
 
--- РћР±СЂР°Р±РѕС‚С‡РёРє СЃРѕР±С‹С‚РёСЏ РєРѕРіРґР° РїР»Р°РЅРµС‚Р° СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅР° СЃ РєР°СЃС‚РѕРјРЅС‹РјРё СЃРѕР±С‹С‚РёСЏРјРё
+-- Обработчик события когда планета сгенерирована с кастомными событиями
 local function on_custom_planet_event(event)
     if not is_mod_enabled() then return end
     
     local ship = event.ship
     local surface = event.surface
-    local events = event.events  -- РјР°СЃСЃРёРІ СЃС‚СЂРѕРє СЃ РёРјРµРЅР°РјРё СЃРѕР±С‹С‚РёР№
+    local events = event.events  -- массив строк с именами событий
 
     if not (ship and surface and surface.valid and events) then
         debug("Invalid on_custom_planet_event data")
@@ -1836,7 +1836,7 @@ local function on_custom_planet_event(event)
 
     debug("on_custom_planet_event triggered with events: " .. table.concat(events, ", "))
 
-    -- РћР±СЂР°Р±Р°С‚С‹РІР°РµРј РєР°Р¶РґРѕРµ СЃРѕР±С‹С‚РёРµ РёР· СЃРїРёСЃРєР°
+    -- Обрабатываем каждое событие из списка
     for _, event_name in ipairs(events) do
         if storage.events[event_name] or DEFAULT_EVENTS[event_name] then
             handle_custom_planet_event(event_name, ship, surface)
@@ -1846,9 +1846,9 @@ local function on_custom_planet_event(event)
     end
 end
 
--- РџСЂРѕРІРµСЂРєР° Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№ (РІС‹Р·С‹РІР°РµС‚СЃСЏ С‡РµСЂРµР· on_nth_tick СЂР°Р· РІ СЃРµРєСѓРЅРґСѓ)
+-- Проверка землетрясений (вызывается через on_nth_tick раз в секунду)
 local function check_earthquakes()
-    -- Р•СЃР»Рё РЅРµС‚ РЅРё Р°РєС‚РёРІРЅС‹С… Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№, РЅРё РїРѕС‚РµСЂСЏРЅРЅС‹С… СѓСЂРѕРІРЅРµР№, РѕС‚РєР»СЋС‡Р°РµРј on_nth_tick
+    -- Если нет ни активных землетрясений, ни потерянных уровней, отключаем on_nth_tick
     if (not storage.active_earthquakes or not next(storage.active_earthquakes))
         and (not storage.lost_decks or not next(storage.lost_decks))
         and (not storage.active_magnetic_storms or not next(storage.active_magnetic_storms)) then
@@ -1875,11 +1875,11 @@ local function check_earthquakes()
     local surfaces_to_end = {}
     
     for surface_index, eq_data in pairs(storage.active_earthquakes) do
-        -- РџСЂРѕРІРµСЂСЏРµРј СЃРЅР°С‡Р°Р»Р° РІСЂРµРјСЏ РѕРєРѕРЅС‡Р°РЅРёСЏ (Р±С‹СЃС‚СЂРµРµ С‡РµРј РїСЂРѕРІРµСЂРєР° РїРѕРІРµСЂС…РЅРѕСЃС‚Рё)
+        -- Проверяем сначала время окончания (быстрее чем проверка поверхности)
         if eq_data.end_tick and now >= eq_data.end_tick then
             table.insert(surfaces_to_end, surface_index)
         elseif eq_data.end_tick then
-            -- РџСЂРѕРІРµСЂСЏРµРј РІР°Р»РёРґРЅРѕСЃС‚СЊ РїРѕРІРµСЂС…РЅРѕСЃС‚Рё С‚РѕР»СЊРєРѕ РµСЃР»Рё РІСЂРµРјСЏ РµС‰Рµ РЅРµ РїСЂРѕС€Р»Рѕ
+            -- Проверяем валидность поверхности только если время еще не прошло
             local surface = game.surfaces[surface_index]
             if not (surface and surface.valid) then
                 table.insert(surfaces_to_end, surface_index)
@@ -1891,7 +1891,7 @@ local function check_earthquakes()
         end_earthquake(si) 
     end
 
-    -- РћР±СЂР°Р±РѕС‚РєР° РѕРєРѕРЅС‡Р°РЅРёСЏ "РїРѕС‚РµСЂСЏРЅРЅС‹С…" СѓСЂРѕРІРЅРµР№
+    -- Обработка окончания "потерянных" уровней
     local surfaces_to_restore = {}
     for surface_index, ld in pairs(storage.lost_decks or {}) do
         if ld.end_tick and now >= ld.end_tick then
@@ -1918,7 +1918,7 @@ local function check_earthquakes()
         end_magnetic_storm(si)
     end
     
-    -- Р•СЃР»Рё РїРѕСЃР»Рµ СѓРґР°Р»РµРЅРёСЏ Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№ Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ СѓСЂРѕРІРЅРµР№ РёС… РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ, РѕС‚РєР»СЋС‡Р°РµРј on_nth_tick
+    -- Если после удаления землетрясений и восстановления уровней их не осталось, отключаем on_nth_tick
     if not next(storage.active_earthquakes)
         and not next(storage.lost_decks or {})
         and not next(storage.active_magnetic_storms or {}) then
@@ -1926,12 +1926,12 @@ local function check_earthquakes()
     end
 end
 
--- РћР±СЂР°Р±РѕС‚РєР° scheduled events (РІС‹Р·С‹РІР°РµС‚СЃСЏ С‡РµСЂРµР· on_tick С‚РѕР»СЊРєРѕ РєРѕРіРґР° РµСЃС‚СЊ СЃРѕР±С‹С‚РёСЏ)
+-- Обработка scheduled events (вызывается через on_tick только когда есть события)
 local function process_scheduled_events()
     local now = game.tick
     
     if not storage.scheduled_events or #storage.scheduled_events == 0 then
-        -- Р•СЃР»Рё СЃРѕР±С‹С‚РёР№ РЅРµС‚, РѕС‚РєР»СЋС‡Р°РµРј on_tick
+        -- Если событий нет, отключаем on_tick
         script.on_event(defines.events.on_tick, nil)
         return
     end
@@ -1969,27 +1969,27 @@ local function process_scheduled_events()
     
     storage.scheduled_events = remaining
     
-    -- Р•СЃР»Рё РїРѕСЃР»Рµ РѕР±СЂР°Р±РѕС‚РєРё СЃРѕР±С‹С‚РёР№ РёС… РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ, РѕС‚РєР»СЋС‡Р°РµРј on_tick
+    -- Если после обработки событий их не осталось, отключаем on_tick
     if #storage.scheduled_events == 0 then
         script.on_event(defines.events.on_tick, nil)
     end
 end
 
--- Р¤СѓРЅРєС†РёСЏ РґР»СЏ РІРєР»СЋС‡РµРЅРёСЏ/РІС‹РєР»СЋС‡РµРЅРёСЏ РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ РЅР° РѕСЃРЅРѕРІРµ РЅР°Р»РёС‡РёСЏ Р°РєС‚РёРІРЅС‹С… СЃРѕР±С‹С‚РёР№
+-- Функция для включения/выключения обработчиков на основе наличия активных событий
 update_tick_handlers = function()
     local has_scheduled = storage.scheduled_events and #storage.scheduled_events > 0
     local has_earthquakes = storage.active_earthquakes and next(storage.active_earthquakes)
     local has_lost = storage.lost_decks and next(storage.lost_decks)
     local has_storms = storage.active_magnetic_storms and next(storage.active_magnetic_storms)
     
-    -- Р’РєР»СЋС‡Р°РµРј on_tick С‚РѕР»СЊРєРѕ РµСЃР»Рё РµСЃС‚СЊ scheduled events
+    -- Включаем on_tick только если есть scheduled events
     if has_scheduled then
         script.on_event(defines.events.on_tick, process_scheduled_events)
     else
         script.on_event(defines.events.on_tick, nil)
     end
     
-    -- on_nth_tick РЅСѓР¶РµРЅ РґР»СЏ Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№, РїРѕС‚РµСЂСЏРЅРЅС‹С… СѓСЂРѕРІРЅРµР№ Рё С†РёРєР»Р° РјР°РіРЅРёС‚РЅРѕРіРѕ С€С‚РѕСЂРјР°
+    -- on_nth_tick нужен для землетрясений, потерянных уровней и цикла магнитного шторма
     if has_earthquakes or has_lost or has_storms then
         script.on_nth_tick(60, check_earthquakes)
     else
@@ -2197,9 +2197,9 @@ find_safe_teleport_position = function(surface, preferred_pos)
     return nil
 end
 
--- РћР±СЂР°Р±РѕС‚С‡РёРє РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ РїСЂРµРґРјРµС‚Р° СЌРєСЃС‚СЂРµРЅРЅРѕРіРѕ РІРѕР·РІСЂР°С‚Р° Рє РєРѕСЂР°Р±Р»СЋ
+-- Обработчик использования предмета экстренного возврата к кораблю
 -- ============================================================
--- Р Р•Р“РРЎРўР РђР¦РРЇ РРќРР¦РРђР›РР—РђР¦РРЇ
+-- РЕГИСТРАЦИЯ ИНИЦИАЛИЗАЦИЯ
 -- ============================================================
 
 -- WDM ship warp event handler (only warping)
@@ -2243,7 +2243,7 @@ local function on_ship_warping(event)
         end_all_magnetic_storms()
         debug("All active magnetic storms ended due to ship warp")
 
-        -- when a ship warps we may also have left a surface with stormвЂ‘disabled entities,
+        -- when a ship warps we may also have left a surface with storm-disabled entities,
         -- or arrived somewhere; restore them just in case
         if event and event.destination_surface and event.destination_surface.valid then
             restore_storm_disabled_on_surface(event.destination_surface.index)
@@ -2273,7 +2273,7 @@ local function register_wdm_ship_warp_events()
     return any
 end
 
--- Р РµРіРёСЃС‚СЂР°С†РёСЏ РѕР±СЂР°Р±РѕС‚С‡РёРєР° СЃРѕР±С‹С‚РёСЏ on_custom_planet_event
+-- Регистрация обработчика события on_custom_planet_event
 local function register_wdm_custom_planet_event()
     if not remote.interfaces["WDM"] then
         debug("WDM interface not found, will retry later")
@@ -2294,34 +2294,34 @@ local function register_wdm_custom_planet_event()
     end
 end
 
--- Р¤СѓРЅРєС†РёСЏ РґР»СЏ СЂРµРіРёСЃС‚СЂР°С†РёРё РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ Р±РµР· РёР·РјРµРЅРµРЅРёСЏ storage (РґР»СЏ on_load)
+-- Функция для регистрации обработчиков без изменения storage (для on_load)
 local function register_event_handlers()
-    -- РћР±СЂР°Р±РѕС‚С‡РёРє СЌРєСЃС‚СЂРµРЅРЅРѕРіРѕ РІРѕР·РІСЂР°С‚Р° РІСЃРµРіРґР° Р°РєС‚РёРІРµРЅ, РЅРµР·Р°РІРёСЃРёРјРѕ РѕС‚ СЃРѕСЃС‚РѕСЏРЅРёСЏ РјРѕРґР°
+    -- Обработчик экстренного возврата всегда активен, независимо от состояния мода
 
     if is_mod_enabled() then
-        -- Р РµРіРёСЃС‚СЂРёСЂСѓРµРј СЃРѕР±С‹С‚РёСЏ РІ WDM
+        -- Регистрируем события в WDM
         register_wdm_planet_events()
 
-        -- Р РµРіРёСЃС‚СЂРёСЂСѓРµРј РѕР±СЂР°Р±РѕС‚С‡РёРєРё СЂР°Р·Р»РёС‡РЅС‹С… СЃРѕР±С‹С‚РёР№ WDM
+        -- Регистрируем обработчики различных событий WDM
         register_wdm_custom_planet_event()
         register_wdm_ship_warp_events()
         
-        -- on_tick Рё on_nth_tick Р±СѓРґСѓС‚ РІРєР»СЋС‡Р°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїСЂРё РїРѕСЏРІР»РµРЅРёРё СЃРѕР±С‹С‚РёР№
-        -- С‡РµСЂРµР· update_tick_handlers(). on_player_changed_surface С‚Р°РєР¶Рµ СѓРїСЂР°РІР»СЏРµС‚СЃСЏ С‚Р°Рј.
+        -- on_tick и on_nth_tick будут включаться автоматически при появлении событий
+        -- через update_tick_handlers(). on_player_changed_surface также управляется там.
         script.on_event(defines.events.on_player_joined_game, on_player_joined_game)
         
-        -- РџСЂРѕРІРµСЂСЏРµРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ СЃРѕР±С‹С‚РёСЏ РїРѕСЃР»Рµ Р·Р°РіСЂСѓР·РєРё Рё РІРєР»СЋС‡Р°РµРј РѕР±СЂР°Р±РѕС‚С‡РёРєРё РµСЃР»Рё РЅСѓР¶РЅРѕ
+        -- Проверяем существующие события после загрузки и включаем обработчики если нужно
         update_tick_handlers()
         
         debug("WDM Boss Expansion mod ENABLED - event handlers registered")
     else
-        -- РћС‚РєР»СЋС‡Р°РµРј РІСЃРµ tick-based РѕР±СЂР°Р±РѕС‚С‡РёРєРё (РєСЂРѕРјРµ СЌРєСЃС‚СЂРµРЅРЅРѕРіРѕ РІРѕР·РІСЂР°С‚Р°)
+        -- Отключаем все tick-based обработчики (кроме экстренного возврата)
         script.on_event(defines.events.on_tick, nil)
         script.on_nth_tick(60, nil)
         script.on_event(defines.events.on_player_changed_surface, nil)
         script.on_event(defines.events.on_player_joined_game, nil)
 
-        -- РћС‚РјРµРЅСЏРµРј СЂРµРіРёСЃС‚СЂР°С†РёСЋ РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ WDM-СЃРѕР±С‹С‚РёР№
+        -- Отменяем регистрацию обработчиков WDM-событий
         if remote.interfaces["WDM"] then
             local ok, id
             ok, id = pcall(function() return remote.call("WDM", "get_on_custom_planet_event") end)
@@ -2332,8 +2332,8 @@ local function register_event_handlers()
         debug("WDM Boss Expansion mod DISABLED - event handlers unregistered")
     end
 
-    -- РџСЂРёРјРµРЅСЏРµРј РЅР°СЃС‚СЂРѕР№РєСѓ РґСЂСѓР¶РµСЃС‚РІРµРЅРЅРѕРіРѕ СѓСЂРѕРЅР° РЅРµР·Р°РІРёСЃРёРјРѕ РѕС‚ РІРєР»СЋС‡РµРЅРЅРѕСЃС‚Рё
-    -- РѕСЃРЅРѕРІРЅС‹С… СЌРІРµРЅС‚РѕРІ РјРѕРґР°, С‚.Рє. РѕРЅР° РѕС‚РІРµС‡Р°РµС‚ С‚РѕР»СЊРєРѕ Р·Р° РїРѕРІРµРґРµРЅРёРµ СЃРёР».
+    -- Применяем настройку дружественного урона независимо от включенности
+    -- основных ивентов мода, т.к. она отвечает только за поведение сил.
     apply_friendly_fire_setting()
 end
 
@@ -2426,7 +2426,7 @@ local function initialize_mod()
     end
 end
 
--- РћР±СЂР°Р±РѕС‚С‡РёРє РёР·РјРµРЅРµРЅРёСЏ РЅР°СЃС‚СЂРѕРµРє
+-- Обработчик изменения настроек
 local function on_runtime_mod_setting_changed(event)
     if event.setting == "wdm-expansion-event-enable" then
         debug("Setting wdm-expansion-event-enable changed, reinitializing mod...")

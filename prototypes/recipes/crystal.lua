@@ -2,6 +2,8 @@ return {
     {
         type = "recipe",
         name = "crystal-processing",
+        order = "w[warponiuym]",
+        subgroup = "intermediate-product",
         icons = {
             {
                 icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/crystal.png",
@@ -31,6 +33,8 @@ return {
     {
         type = "recipe",
         name = "crystal-processing-t2",
+        order = "w[warponiuym]",
+        subgroup = "intermediate-product",
         icons = {
             {
                 icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/crystal.png",

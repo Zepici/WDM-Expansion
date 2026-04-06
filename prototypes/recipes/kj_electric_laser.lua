@@ -6,10 +6,10 @@ local recipes = {
         enabled = false,
         energy_required = 35,
         ingredients = {
-            {type = "fluid", name = "warponium-fluid", amount = 2000},
-            { type = "item", name = "steel-plate", amount = 10 },
+            {type = "fluid", name = "warponium-fluid", amount = 2500},
+            { type = "item", name = "steel-plate", amount = 100 },
             { type = "item", name = "processing-unit",    amount = 20 },
-            { type = "item", name = "battery", amount = 20 }
+            { type = "item", name = "battery", amount = 50 }
         },
         results = { { type = "item", name = "kj_electric_laser_player", amount = 1 }, },
         auto_recycle = false,
@@ -25,10 +25,10 @@ if mods["space-age"] then
         enabled = false,
         energy_required = 35,
         ingredients = {
-            {type = "fluid", name = "warponium-fluid", amount = 2000},
-            { type = "item", name = "steel-plate", amount = 10 },
+            {type = "fluid", name = "warponium-fluid", amount = 2500},
+            { type = "item", name = "steel-plate", amount = 100 },
             { type = "item", name = "processing-unit",    amount = 20 },
-            { type = "item", name = "battery", amount = 20 }
+            { type = "item", name = "battery", amount = 50 }
         },
         results = { { type = "item", name = "kj_electric_laser_player", amount = 1 }, },
         auto_recycle = false,

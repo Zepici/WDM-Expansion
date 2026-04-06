@@ -85,10 +85,10 @@ data.raw["active-defense-equipment"]["pamk3-pdd"].sprite = {
     height = 256
 }
 data.raw["item"]["pamk3-pdd"].icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/discharge-defense-equipment.png"
-data.raw["ammo"]["kj_laser_normal"].ammo_type.action.range = 80
-data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.range = 80
+data.raw["ammo"]["kj_laser_normal"].ammo_type.action.range = 70
+data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.range = 70
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.width = 6
-
+data.raw["fluid"]["warponium-fluid"].subgroup = "fluid"
 
 local proj = data.raw["artillery-projectile"]["wdm-blast-projectile"]
 

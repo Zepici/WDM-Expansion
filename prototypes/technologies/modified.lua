@@ -31,7 +31,10 @@ local tech = {
             },
             time = 120
         }
-    }    
+    },
+    ["pamk3-nvmk2"] = {
+        prerequisites = { "night-vision-equipment", "utility-science-pack" }
+    }
 }
 
 if mods["space-age"] then
