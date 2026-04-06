@@ -1,4 +1,4 @@
--- Made by ZepCannon
+﻿-- Made by ZepCannon
 local util = require("util")
 
 local function has_active_mod(mod_name)
@@ -7,7 +7,7 @@ end
 local HAS_SPACE_AGE = has_active_mod("space-age")
 
 -- ============================================================
--- КОНСТАНТЫ И КОНФИГУРАЦИЯ
+-- РљРћРќРЎРўРђРќРўР« Р РљРћРќР¤РР“РЈР РђР¦РРЇ
 -- ============================================================
 
 local DEFAULT_TECH_TIERS
@@ -30,7 +30,7 @@ else
     }
 end
 
--- Конфигурация событий по умолчанию
+-- РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ СЃРѕР±С‹С‚РёР№ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
 local DEFAULT_EVENTS = {
     laser_boss = {
         prototype = nil,
@@ -113,7 +113,7 @@ local DEFAULT_EVENTS = {
         growth_count = 3,
         growth_interval_seconds = 120,
         ship_exclusion_radius = 60,
-        enemy_bonus_per_crystal = 0.05 -- additive per mined crystal
+        enemy_bonus_per_crystal = 0.15 -- additive per mined crystal
     },
     bright_day = {
         -- WDM planet event parameters
@@ -153,7 +153,7 @@ if has_active_mod("magnetic-storm") then
 end
 
 -- ============================================================
--- УТИЛИТЫ И ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+-- РЈРўРР›РРўР« Р Р’РЎРџРћРњРћР“РђРўР•Р›Р¬РќР«Р• Р¤РЈРќРљР¦РР
 -- ============================================================
 
 local function is_mod_enabled()
@@ -244,6 +244,22 @@ local function set_magnetic_storm_value(surface, value)
     return pcall(function() surface.set_property("magnetic-storm", value) end)
 end
 
+local function play_storm_state_change_sound(surface)
+    if not game then return end
+
+    pcall(function()
+        game.play_sound{
+            path = "wdm-magnetic-storm-state-change",
+            volume_modifier = 0.8
+        }
+    end)
+end
+
+local STORM_REDUCTION_TRIGGER_VALUE = 50
+local STORM_REDUCTION_VALUE = 40
+local STORM_REDUCTION_INTERVAL_TICKS = 120 * 60
+local STORM_REDUCTION_DURATION_TICKS = 20 * 60
+
 local STORM_DISABLE_THRESHOLDS_BY_TYPE = {
     ["accumulator"] = 25,
     ["solar-panel"] = 45,
@@ -270,14 +286,19 @@ local function get_storm_disable_threshold(entity)
     return STORM_DISABLE_THRESHOLDS_BY_TYPE[entity.type]
 end
 
-local function get_storm_disabled_records_for_surface(surface_index, create_if_missing)
-    storage.storm_disabled_entities = storage.storm_disabled_entities or {}
-    local records = storage.storm_disabled_entities[surface_index]
-    if (not records) and create_if_missing then
-        records = {}
-        storage.storm_disabled_entities[surface_index] = records
+local function get_storm_surface_cache(surface_index, create_if_missing)
+    storage.storm_tracked_entities = storage.storm_tracked_entities or {}
+    local cache = storage.storm_tracked_entities[surface_index]
+    if (not cache) and create_if_missing then
+        cache = {
+            all = {},
+            tracked_by_threshold = {},
+            currently_disabled = {},
+            needs_refresh = false
+        }
+        storage.storm_tracked_entities[surface_index] = cache
     end
-    return records
+    return cache
 end
 
 local function make_storm_entity_record_key(entity)
@@ -296,10 +317,65 @@ end
 local function make_storm_entity_record(entity)
     local pos = entity.position
     return {
+        key = make_storm_entity_record_key(entity),
+        entity = entity,
+        threshold = get_storm_disable_threshold(entity),
         name = entity.name,
         position = { x = pos.x, y = pos.y },
         unit_number = entity.unit_number
     }
+end
+
+local function add_storm_tracked_entity(entity)
+    if not (entity and entity.valid and entity.surface and entity.surface.valid) then return nil end
+
+    local threshold = get_storm_disable_threshold(entity)
+    if not threshold then return nil end
+
+    local cache = get_storm_surface_cache(entity.surface.index, true)
+    local key = make_storm_entity_record_key(entity)
+    local existing = cache.all[key]
+    if existing then
+        existing.entity = entity
+        existing.threshold = threshold
+        return existing, threshold
+    end
+
+    local record = make_storm_entity_record(entity)
+    cache.all[key] = record
+    cache.tracked_by_threshold[threshold] = cache.tracked_by_threshold[threshold] or {}
+    cache.tracked_by_threshold[threshold][key] = record
+    return record, threshold
+end
+
+local function refresh_storm_entity_cache_for_surface(surface, force_rebuild)
+    if not (surface and surface.valid) then return nil end
+
+    local cache = get_storm_surface_cache(surface.index, true)
+    local needs_rebuild = force_rebuild or cache.needs_refresh or (not next(cache.all))
+
+    if needs_rebuild then
+        cache.all = {}
+        cache.tracked_by_threshold = {}
+        cache.currently_disabled = {}
+        cache.needs_refresh = false
+    else
+        return cache
+    end
+
+    for _, entity_type in ipairs(STORM_DISABLE_ENTITY_TYPES) do
+        local entities = surface.find_entities_filtered { type = entity_type }
+        for _, entity in ipairs(entities) do
+            add_storm_tracked_entity(entity)
+        end
+    end
+
+    return cache
+end
+
+local function ensure_storm_entity_cache_for_surface(surface)
+    if not (surface and surface.valid) then return nil end
+    return refresh_storm_entity_cache_for_surface(surface, false)
 end
 
 local function set_entity_disabled_by_storm(entity, should_disable)
@@ -312,89 +388,160 @@ local function set_entity_disabled_by_storm(entity, should_disable)
     return true, true
 end
 
-local function apply_storm_disable_to_entity(entity, storm_value)
-    if not (entity and entity.valid and entity.surface and entity.surface.valid) then return end
+local function apply_storm_state_to_record(surface_index, cache, record, should_disable)
+    if not (cache and record) then return end
 
-    local threshold = get_storm_disable_threshold(entity)
-    if not threshold then return end
+    local entity = record.entity
+    if not (entity and entity.valid and entity.surface and entity.surface.valid and entity.surface.index == surface_index) then
+        cache.needs_refresh = true
+        cache.all[record.key] = nil
+        local threshold_bucket = cache.tracked_by_threshold[record.threshold]
+        if threshold_bucket then
+            threshold_bucket[record.key] = nil
+            if not next(threshold_bucket) then
+                cache.tracked_by_threshold[record.threshold] = nil
+            end
+        end
+        cache.currently_disabled[record.key] = nil
+        return
+    end
 
-    local should_disable = storm_value >= threshold
-    local surface_index = entity.surface.index
-    local key = make_storm_entity_record_key(entity)
+    local ok, changed = set_entity_disabled_by_storm(entity, should_disable)
+    if not ok then return end
 
     if should_disable then
-        local ok, changed = set_entity_disabled_by_storm(entity, true)
-        if ok and changed then
-            local records = get_storm_disabled_records_for_surface(surface_index, true)
-            records[key] = make_storm_entity_record(entity)
+        if changed or not cache.currently_disabled[record.key] then
+            cache.currently_disabled[record.key] = record
         end
     else
-        local records = get_storm_disabled_records_for_surface(surface_index, false)
-        if records and records[key] then
-            local ok = set_entity_disabled_by_storm(entity, false)
-            if ok then
-                records[key] = nil
-                if not next(records) then
-                    storage.storm_disabled_entities[surface_index] = nil
+        cache.currently_disabled[record.key] = nil
+    end
+end
+
+local function apply_storm_disable_delta_on_surface(surface, previous_storm_value, storm_value)
+    if not (surface and surface.valid) then return end
+    local old_value = clamp(previous_storm_value or 0, 0, 100)
+    local new_value = clamp(storm_value or 0, 0, 100)
+    if old_value == new_value then return end
+
+    local function apply_delta(cache)
+        if new_value > old_value then
+            for threshold, records in pairs(cache.tracked_by_threshold) do
+                if old_value < threshold and new_value >= threshold then
+                    for _, record in pairs(records) do
+                        apply_storm_state_to_record(surface.index, cache, record, true)
+                    end
+                end
+            end
+        else
+            local disabled = cache.currently_disabled
+            local keys_to_enable = {}
+            for key, record in pairs(disabled) do
+                local threshold = record and record.threshold
+                if threshold and old_value >= threshold and new_value < threshold then
+                    keys_to_enable[#keys_to_enable + 1] = key
+                end
+            end
+            for _, key in ipairs(keys_to_enable) do
+                local record = disabled[key]
+                if record then
+                    apply_storm_state_to_record(surface.index, cache, record, false)
                 end
             end
         end
     end
+
+    local cache = ensure_storm_entity_cache_for_surface(surface)
+    if not cache then return end
+    apply_delta(cache)
+
+    if cache.needs_refresh then
+        cache = refresh_storm_entity_cache_for_surface(surface, true)
+        if cache then
+            apply_delta(cache)
+        end
+    end
 end
 
-local function apply_storm_disable_on_surface(surface, storm_value)
+local function sync_storm_disable_state_on_surface(surface, storm_value)
     if not (surface and surface.valid) then return end
     local value = clamp(storm_value or 0, 0, 100)
-    for _, entity_type in ipairs(STORM_DISABLE_ENTITY_TYPES) do
-        local entities = surface.find_entities_filtered{ type = entity_type }
-        for _, entity in ipairs(entities) do
-            apply_storm_disable_to_entity(entity, value)
+
+    local function sync_cache(cache)
+        cache.currently_disabled = {}
+        for threshold, records in pairs(cache.tracked_by_threshold) do
+            local should_disable = value >= threshold
+            for _, record in pairs(records) do
+                apply_storm_state_to_record(surface.index, cache, record, should_disable)
+            end
+        end
+    end
+
+    local cache = ensure_storm_entity_cache_for_surface(surface)
+    if not cache then return end
+    sync_cache(cache)
+
+    if cache.needs_refresh then
+        cache = refresh_storm_entity_cache_for_surface(surface, true)
+        if cache then
+            sync_cache(cache)
         end
     end
 end
 
 local function remove_storm_disabled_record_for_entity(entity)
     if not (entity and entity.valid and entity.surface and entity.surface.valid) then return end
-    local records = get_storm_disabled_records_for_surface(entity.surface.index, false)
-    if not records then return end
+    local cache = get_storm_surface_cache(entity.surface.index, false)
+    if not cache then return end
+    cache.currently_disabled[make_storm_entity_record_key(entity)] = nil
+end
 
-    records[make_storm_entity_record_key(entity)] = nil
-    if not next(records) then
-        storage.storm_disabled_entities[entity.surface.index] = nil
+local function remove_storm_tracked_record_for_entity(entity)
+    if not (entity and entity.valid and entity.surface and entity.surface.valid) then return end
+    local surface_index = entity.surface.index
+    local cache = get_storm_surface_cache(surface_index, false)
+    if not cache then return end
+
+    local key = make_storm_entity_record_key(entity)
+    local record = cache.all[key]
+    if not record then return end
+
+    cache.all[key] = nil
+    local threshold_bucket = cache.tracked_by_threshold[record.threshold]
+    if threshold_bucket then
+        threshold_bucket[key] = nil
+        if not next(threshold_bucket) then
+            cache.tracked_by_threshold[record.threshold] = nil
+        end
+    end
+    cache.currently_disabled[key] = nil
+
+    if not next(cache.all) then
+        storage.storm_tracked_entities[surface_index] = nil
     end
 end
 
 local function restore_storm_disabled_on_surface(surface_index)
-    if not (storage and storage.storm_disabled_entities) then return end
-    local records = storage.storm_disabled_entities[surface_index]
-    if not records then return end
+    local cache = get_storm_surface_cache(surface_index, false)
+    if not cache then return end
 
-    local surface = game.surfaces[surface_index]
-    if surface and surface.valid then
-        for _, record in pairs(records) do
-            local found = surface.find_entities_filtered{
-                name = record.name,
-                position = record.position,
-                radius = 0.5
-            }
-            for _, entity in ipairs(found) do
-                if entity.valid and ((not record.unit_number) or entity.unit_number == record.unit_number) then
-                    if entity.is_updatable then
-                        entity.disabled_by_script = false
-                    end
-                    break
-                end
-            end
-        end
+    local keys = {}
+    for key in pairs(cache.currently_disabled) do
+        keys[#keys + 1] = key
     end
-
-    storage.storm_disabled_entities[surface_index] = nil
+    for _, key in ipairs(keys) do
+        local record = cache.currently_disabled[key]
+        if record and record.entity and record.entity.valid and record.entity.is_updatable then
+            record.entity.disabled_by_script = false
+        end
+        cache.currently_disabled[key] = nil
+    end
 end
 
 local function restore_all_storm_disabled_entities()
-    if not (storage and storage.storm_disabled_entities and next(storage.storm_disabled_entities)) then return end
+    if not (storage and storage.storm_tracked_entities and next(storage.storm_tracked_entities)) then return end
     local indices = {}
-    for surface_index in pairs(storage.storm_disabled_entities) do
+    for surface_index in pairs(storage.storm_tracked_entities) do
         table.insert(indices, surface_index)
     end
     for _, surface_index in ipairs(indices) do
@@ -404,17 +551,24 @@ end
 
 local function apply_storm_disable_to_built_entity(entity)
     if not (entity and entity.valid and entity.surface and entity.surface.valid) then return end
+    local record = add_storm_tracked_entity(entity)
+
     local storms = storage and storage.active_magnetic_storms
     if not storms then return end
     local storm_data = storms[entity.surface.index]
     if not storm_data then return end
 
-    local storm_value = storm_data.storm_value
+    local storm_value = storm_data.current_value
+    if type(storm_value) ~= "number" then
+        storm_value = storm_data.storm_value
+    end
     if type(storm_value) ~= "number" then
         storm_value = get_magnetic_storm_value(entity.surface) or 0
     end
 
-    apply_storm_disable_to_entity(entity, storm_value)
+    if record and record.threshold then
+        apply_storm_state_to_record(entity.surface.index, get_storm_surface_cache(entity.surface.index, true), record, storm_value >= record.threshold)
+    end
 end
 
 -- ============================================================
@@ -427,7 +581,7 @@ local function init_event_storage()
     storage.active_earthquakes = storage.active_earthquakes or {}
     storage.lost_decks = storage.lost_decks or {}
     storage.active_magnetic_storms = storage.active_magnetic_storms or {}
-    storage.storm_disabled_entities = storage.storm_disabled_entities or {}
+    storage.storm_tracked_entities = storage.storm_tracked_entities or {}
     storage.crystal_overgrowth_active = storage.crystal_overgrowth_active or {}
     storage.crystal_overgrowth_blocked_zones = storage.crystal_overgrowth_blocked_zones or {}
     storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
@@ -435,7 +589,7 @@ local function init_event_storage()
     storage.enemy_biological_damage_bonus = storage.enemy_biological_damage_bonus or 0
 end
 
-local CRYSTAL_LOW_BONUS = 0.025
+local CRYSTAL_LOW_BONUS = 0.075
 local SPECIAL_CRYSTAL_BONUS_TILES = {
     ["orange-refined-concrete"] = true,
     ["yellow-refined-concrete"] = true,
@@ -482,7 +636,7 @@ local function take_crystal_bonus_override(entity)
 end
 
 -- ============================================================
--- DRUZHESTVENNYI URON (FRIENDLY FIRE) ДЛЯ СИЛ
+-- DRUZHESTVENNYI URON (FRIENDLY FIRE) Р”Р›РЇ РЎРР›
 -- ============================================================
 
 local FRIENDLY_FIRE_FORCES = { "enemy", "pirate" }
@@ -495,14 +649,14 @@ local function apply_friendly_fire_setting()
     for _, name in ipairs(FRIENDLY_FIRE_FORCES) do
         local force = game.forces[name]
         if force and force.valid and force.friendly_fire ~= nil then
-            -- Если настройка включена – отключаем дружественный урон,
-            -- иначе возвращаем дефолтное поведение (разрешаем).
+            -- Р•СЃР»Рё РЅР°СЃС‚СЂРѕР№РєР° РІРєР»СЋС‡РµРЅР° вЂ“ РѕС‚РєР»СЋС‡Р°РµРј РґСЂСѓР¶РµСЃС‚РІРµРЅРЅС‹Р№ СѓСЂРѕРЅ,
+            -- РёРЅР°С‡Рµ РІРѕР·РІСЂР°С‰Р°РµРј РґРµС„РѕР»С‚РЅРѕРµ РїРѕРІРµРґРµРЅРёРµ (СЂР°Р·СЂРµС€Р°РµРј).
             force.friendly_fire = not disable
         end
     end
 end
 
--- WAP теперь управляется WDM, не нужны локальные функции
+-- WAP С‚РµРїРµСЂСЊ СѓРїСЂР°РІР»СЏРµС‚СЃСЏ WDM, РЅРµ РЅСѓР¶РЅС‹ Р»РѕРєР°Р»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё
 
 local function sync_default_events()
     storage.events = storage.events or {}
@@ -518,7 +672,7 @@ local function sync_default_events()
     end
 end
 
--- Регистрация событий в WDM через add_custom_planet_event
+-- Р РµРіРёСЃС‚СЂР°С†РёСЏ СЃРѕР±С‹С‚РёР№ РІ WDM С‡РµСЂРµР· add_custom_planet_event
 local function register_wdm_planet_events()
     if not remote.interfaces["WDM"] then
         debug("WDM interface not found, cannot register planet events")
@@ -617,7 +771,7 @@ local function get_threat_level(surface, force, opts)
 end
 
 -- ============================================================
--- ПОИСК ПОЗИЦИЙ
+-- РџРћРРЎРљ РџРћР—РР¦РР™
 -- ============================================================
 
 local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist, prototype)
@@ -661,7 +815,7 @@ local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist, 
 end
 
 -- ============================================================
--- СПАВН СУЩНОСТЕЙ (helper)
+-- РЎРџРђР’Рќ РЎРЈР©РќРћРЎРўР•Р™ (helper)
 -- ============================================================
 --[[
 local function spawn_pirate_base(ship, surface)
@@ -722,7 +876,7 @@ local function spawn_pirate_base(ship, surface)
         surface = surface
     }
     game.print({"pirate_base",pirate_pos.gps_tag})
-    debug("[WDM Boss Expansion] ☠ Пираты построили временный лагерь на поверхности " .. surface.name)
+    debug("[WDM Boss Expansion] в  РџРёСЂР°С‚С‹ РїРѕСЃС‚СЂРѕРёР»Рё РІСЂРµРјРµРЅРЅС‹Р№ Р»Р°РіРµСЂСЊ РЅР° РїРѕРІРµСЂС…РЅРѕСЃС‚Рё " .. surface.name)
     surface.play_sound{ path = "mf_sound_siren", volume_modifier = 0.8 }
 end
 ]]
@@ -795,7 +949,7 @@ end
 
 
 -- ============================================================
--- ACTIONS (действия событий) - объявляем заранее
+-- ACTIONS (РґРµР№СЃС‚РІРёСЏ СЃРѕР±С‹С‚РёР№) - РѕР±СЉСЏРІР»СЏРµРј Р·Р°СЂР°РЅРµРµ
 -- ============================================================
 
 local ACTIONS = {}
@@ -808,10 +962,10 @@ local ensure_crystal_tick
 local collect_ship_floor_surfaces_for_force
 
 -- ============================================================
--- СИСТЕМА ПЛАНИРОВАНИЯ
+-- РЎРРЎРўР•РњРђ РџР›РђРќРР РћР’РђРќРРЇ
 -- ============================================================
 
--- Объявляем функцию заранее, определение будет ниже
+-- РћР±СЉСЏРІР»СЏРµРј С„СѓРЅРєС†РёСЋ Р·Р°СЂР°РЅРµРµ, РѕРїСЂРµРґРµР»РµРЅРёРµ Р±СѓРґРµС‚ РЅРёР¶Рµ
 local update_tick_handlers
 
 local function schedule_event_for_tick(name, ship, surface, delay, meta)
@@ -828,14 +982,14 @@ local function schedule_event_for_tick(name, ship, surface, delay, meta)
         ship_info = ship_info,
         meta = meta
     })
-    -- Включаем on_tick когда добавляем событие
+    -- Р’РєР»СЋС‡Р°РµРј on_tick РєРѕРіРґР° РґРѕР±Р°РІР»СЏРµРј СЃРѕР±С‹С‚РёРµ
     if update_tick_handlers then
         update_tick_handlers()
     end
 end
 
--- Обработка события когда планета сгенерирована с нашим событием
--- Вызывается через on_custom_planet_event из WDM
+-- РћР±СЂР°Р±РѕС‚РєР° СЃРѕР±С‹С‚РёСЏ РєРѕРіРґР° РїР»Р°РЅРµС‚Р° СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅР° СЃ РЅР°С€РёРј СЃРѕР±С‹С‚РёРµРј
+-- Р’С‹Р·С‹РІР°РµС‚СЃСЏ С‡РµСЂРµР· on_custom_planet_event РёР· WDM
 local function handle_custom_planet_event(event_name, ship, surface)
     local ev = storage.events and storage.events[event_name] or DEFAULT_EVENTS[event_name]
     if not ev then
@@ -845,7 +999,7 @@ local function handle_custom_planet_event(event_name, ship, surface)
 
     debug("Handling custom planet event: " .. event_name .. " on surface " .. tostring(surface and surface.name))
 
-    -- Создаем ship_stub для совместимости с ACTIONS
+    -- РЎРѕР·РґР°РµРј ship_stub РґР»СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё СЃ ACTIONS
     local ship_stub = {
         position = ship.position,
         force = ship.force,
@@ -864,7 +1018,7 @@ local function handle_custom_planet_event(event_name, ship, surface)
         return
     end
 
-    -- Для laser_boss добавляем задержку и волны
+    -- Р”Р»СЏ laser_boss РґРѕР±Р°РІР»СЏРµРј Р·Р°РґРµСЂР¶РєСѓ Рё РІРѕР»РЅС‹
     local meta = nil
     if event_name == "laser_boss" then
         local seconds = math.random(60, 120)
@@ -889,19 +1043,19 @@ local function handle_custom_planet_event(event_name, ship, surface)
             tech_tiers = ev.tech_tiers
         }
 
-        -- Запланировать первую волну с задержкой
+        -- Р—Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ РїРµСЂРІСѓСЋ РІРѕР»РЅСѓ СЃ Р·Р°РґРµСЂР¶РєРѕР№
         schedule_event_for_tick(event_name, ship_stub, surface, delay_ticks, meta)
         return
     end
 
-    -- Для других событий (earthquake) выполняем сразу
+    -- Р”Р»СЏ РґСЂСѓРіРёС… СЃРѕР±С‹С‚РёР№ (earthquake) РІС‹РїРѕР»РЅСЏРµРј СЃСЂР°Р·Сѓ
     local ok, err = pcall(action, surface, ev, ship_stub, meta)
     if not ok then
         debug("Error executing action for event '" .. event_name .. "': " .. tostring(err))
     end
 end
 
--- ACTION: Спавн лазерного босса (использует unified threat level)
+-- ACTION: РЎРїР°РІРЅ Р»Р°Р·РµСЂРЅРѕРіРѕ Р±РѕСЃСЃР° (РёСЃРїРѕР»СЊР·СѓРµС‚ unified threat level)
 ACTIONS.spawn_laser_boss_far = function(surface, ev, ship_stub, meta)
     local base_count = ev.spawn_count or ev.count or 1
     local opts = ev.spawn_opts or {}
@@ -964,7 +1118,7 @@ ACTIONS.spawn_pirate_base = function(surface, ev, ship_stub)
     spawn_pirate_base(ship_stub, surface)
 end
 ]]
--- ACTION: Землетрясение - снижает скорость ходьбы всех игроков на поверхности
+-- ACTION: Р—РµРјР»РµС‚СЂСЏСЃРµРЅРёРµ - СЃРЅРёР¶Р°РµС‚ СЃРєРѕСЂРѕСЃС‚СЊ С…РѕРґСЊР±С‹ РІСЃРµС… РёРіСЂРѕРєРѕРІ РЅР° РїРѕРІРµСЂС…РЅРѕСЃС‚Рё
 ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
     if not (surface and surface.valid) then return end
 
@@ -1006,7 +1160,7 @@ ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
     }
     storage.active_earthquakes[surface_index] = eq_data
 
-    -- Включаем on_nth_tick для проверки землетрясений
+    -- Р’РєР»СЋС‡Р°РµРј on_nth_tick РґР»СЏ РїСЂРѕРІРµСЂРєРё Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№
     if update_tick_handlers then
         update_tick_handlers()
     end
@@ -1132,7 +1286,39 @@ local function apply_magnetic_storm_on_surface(surface, storm_value, end_tick, s
         applied_value = math.max(existing.storm_value, storm_value)
     end
 
-    if not set_magnetic_storm_value(surface, applied_value) then
+    local current_value = applied_value
+    local next_reduction_tick = nil
+    local reduction_end_tick = nil
+
+    if existing then
+        if type(existing.current_value) == "number" then
+            current_value = existing.current_value
+        end
+        if type(existing.next_reduction_tick) == "number" then
+            next_reduction_tick = existing.next_reduction_tick
+        end
+        if type(existing.reduction_end_tick) == "number" then
+            reduction_end_tick = existing.reduction_end_tick
+        end
+    end
+
+    if applied_value > STORM_REDUCTION_TRIGGER_VALUE then
+        if current_value >= applied_value then
+            current_value = applied_value
+            reduction_end_tick = nil
+            next_reduction_tick = next_reduction_tick or (game.tick + STORM_REDUCTION_INTERVAL_TICKS)
+        else
+            current_value = STORM_REDUCTION_VALUE
+            reduction_end_tick = reduction_end_tick or (game.tick + STORM_REDUCTION_DURATION_TICKS)
+            next_reduction_tick = nil
+        end
+    else
+        current_value = applied_value
+        next_reduction_tick = nil
+        reduction_end_tick = nil
+    end
+
+    if not set_magnetic_storm_value(surface, current_value) then
         debug("electromagnetic_storm: failed to set magnetic-storm property on surface " .. tostring(surface.name))
         return false, nil, nil
     end
@@ -1143,11 +1329,112 @@ local function apply_magnetic_storm_on_surface(surface, storm_value, end_tick, s
         surface_name = surface.name,
         base_value = (existing and existing.base_value) or previous_value,
         storm_value = applied_value,
+        current_value = current_value,
+        next_reduction_tick = next_reduction_tick,
+        reduction_end_tick = reduction_end_tick,
         silent = silent and true or nil
     }
 
-    apply_storm_disable_on_surface(surface, applied_value)
+    local previous_effective_value = (existing and existing.current_value)
+    if type(previous_effective_value) ~= "number" then
+        previous_effective_value = previous_value
+    end
+    apply_storm_disable_delta_on_surface(surface, previous_effective_value, current_value)
+    if (not existing) and current_value > 0 then
+        sync_storm_disable_state_on_surface(surface, current_value)
+    end
     return true, applied_value, effective_end_tick
+end
+
+local function update_magnetic_storm_cycle(surface, storm_data, now)
+    if not (surface and surface.valid and storm_data) then return false end
+
+    local base_value = storm_data.storm_value
+    if type(base_value) ~= "number" then
+        base_value = get_magnetic_storm_value(surface) or 0
+        storm_data.storm_value = base_value
+    end
+
+    local current_value = storm_data.current_value
+    if type(current_value) ~= "number" then
+        current_value = get_magnetic_storm_value(surface) or base_value
+    end
+
+    if base_value <= STORM_REDUCTION_TRIGGER_VALUE then
+        if current_value ~= base_value then
+            if not set_magnetic_storm_value(surface, base_value) then
+                debug("electromagnetic_storm: failed to normalize magnetic-storm on surface " .. tostring(surface.name))
+                return false
+            end
+            if not storm_data.silent then
+                play_storm_state_change_sound(surface)
+            end
+            apply_storm_disable_delta_on_surface(surface, current_value, base_value)
+            local cache = get_storm_surface_cache(surface.index, false)
+            if cache and base_value > 0 and not next(cache.currently_disabled) then
+                sync_storm_disable_state_on_surface(surface, base_value)
+            end
+            storm_data.current_value = base_value
+            storm_data.next_reduction_tick = nil
+            storm_data.reduction_end_tick = nil
+            return true
+        end
+        storm_data.current_value = base_value
+        storm_data.next_reduction_tick = nil
+        storm_data.reduction_end_tick = nil
+        return false
+    end
+
+    local next_reduction_tick = storm_data.next_reduction_tick
+    local reduction_end_tick = storm_data.reduction_end_tick
+    local target_value = current_value
+
+    if type(reduction_end_tick) == "number" then
+        if now >= reduction_end_tick then
+            target_value = base_value
+            reduction_end_tick = nil
+            next_reduction_tick = now + STORM_REDUCTION_INTERVAL_TICKS
+        else
+            target_value = STORM_REDUCTION_VALUE
+        end
+    else
+        if type(next_reduction_tick) ~= "number" then
+            next_reduction_tick = now + STORM_REDUCTION_INTERVAL_TICKS
+        end
+        if now >= next_reduction_tick then
+            target_value = STORM_REDUCTION_VALUE
+            reduction_end_tick = now + STORM_REDUCTION_DURATION_TICKS
+            next_reduction_tick = nil
+        else
+            target_value = base_value
+        end
+    end
+
+    storm_data.next_reduction_tick = next_reduction_tick
+    storm_data.reduction_end_tick = reduction_end_tick
+
+    if current_value == target_value then
+        storm_data.current_value = current_value
+        return false
+    end
+
+    if not set_magnetic_storm_value(surface, target_value) then
+        debug("electromagnetic_storm: failed to update magnetic-storm on surface " .. tostring(surface.name))
+        return false
+    end
+
+    if not storm_data.silent then
+        play_storm_state_change_sound(surface)
+    end
+    apply_storm_disable_delta_on_surface(surface, current_value, target_value)
+    if target_value > 0 then
+        local cache = get_storm_surface_cache(surface.index, false)
+        if cache and (current_value > target_value) and not next(cache.currently_disabled) then
+            sync_storm_disable_state_on_surface(surface, target_value)
+        end
+    end
+    storm_data.current_value = target_value
+    return true
 end
 
 collect_ship_floor_surfaces_for_force = function(force)
@@ -1220,10 +1507,10 @@ ACTIONS.electromagnetic_storm = function(surface, ev, ship_stub, meta)
     local applied_count = 0
     local display_surface_name = surface.name
     local display_value = storm_value
-    local display_end_tick = end_tick
 
     -- use a large tick value so the storm never expires on its own
     local stored_end = math.huge
+    local display_end_tick = stored_end
 
     for _, target in ipairs(targets) do
         local ok, applied_value, effective_end_tick = apply_magnetic_storm_on_surface(target.surface, storm_value, stored_end, target.silent)
@@ -1401,7 +1688,7 @@ local function on_crystal_mined(event)
     if entity.name ~= "crystal" then return end
 
     local ev = storage.events and storage.events.crystal_overgrowth or DEFAULT_EVENTS.crystal_overgrowth
-    local bonus = (ev and ev.enemy_bonus_per_crystal) or 0.03
+    local bonus = (ev and ev.enemy_bonus_per_crystal) or 0.09
     local bonus_override = take_crystal_bonus_override(entity)
     if type(bonus_override) == "number" then
         bonus = bonus_override
@@ -1428,7 +1715,17 @@ local function apply_enemy_damage_bonuses()
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("biological", storage.enemy_biological_damage_bonus) end) end
     end)
 end
-
+local function reset_crystal_mined_bonuses()
+    if not storage then return 0, 0 end
+    local old_melee_bonus = storage.enemy_melee_damage_bonus or 0
+    local old_biological_bonus = storage.enemy_biological_damage_bonus or 0
+    storage.enemy_melee_damage_bonus = 0
+    storage.enemy_biological_damage_bonus = 0
+    apply_enemy_damage_bonuses()
+    debug("Crystal mined bonuses reset from melee=" .. tostring(old_melee_bonus)
+        .. ", biological=" .. tostring(old_biological_bonus))
+    return old_melee_bonus, old_biological_bonus
+end
 
 local function end_earthquake(surface_index)
     local eq_data = storage.active_earthquakes[surface_index]
@@ -1450,7 +1747,7 @@ local function end_earthquake(surface_index)
 
     storage.active_earthquakes[surface_index] = nil
     
-    -- Отключаем on_nth_tick если землетрясений больше нет
+    -- РћС‚РєР»СЋС‡Р°РµРј on_nth_tick РµСЃР»Рё Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№ Р±РѕР»СЊС€Рµ РЅРµС‚
     if update_tick_handlers then
         update_tick_handlers()
     end
@@ -1521,16 +1818,16 @@ local function restore_player_speed_on_surface_change(player_index, old_surface_
 end
 
 -- ============================================================
--- ОБРАБОТЧИКИ FACTORIO
+-- РћР‘Р РђР‘РћРўР§РРљР FACTORIO
 -- ============================================================
 
--- Обработчик события когда планета сгенерирована с кастомными событиями
+-- РћР±СЂР°Р±РѕС‚С‡РёРє СЃРѕР±С‹С‚РёСЏ РєРѕРіРґР° РїР»Р°РЅРµС‚Р° СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅР° СЃ РєР°СЃС‚РѕРјРЅС‹РјРё СЃРѕР±С‹С‚РёСЏРјРё
 local function on_custom_planet_event(event)
     if not is_mod_enabled() then return end
     
     local ship = event.ship
     local surface = event.surface
-    local events = event.events  -- массив строк с именами событий
+    local events = event.events  -- РјР°СЃСЃРёРІ СЃС‚СЂРѕРє СЃ РёРјРµРЅР°РјРё СЃРѕР±С‹С‚РёР№
 
     if not (ship and surface and surface.valid and events) then
         debug("Invalid on_custom_planet_event data")
@@ -1539,7 +1836,7 @@ local function on_custom_planet_event(event)
 
     debug("on_custom_planet_event triggered with events: " .. table.concat(events, ", "))
 
-    -- Обрабатываем каждое событие из списка
+    -- РћР±СЂР°Р±Р°С‚С‹РІР°РµРј РєР°Р¶РґРѕРµ СЃРѕР±С‹С‚РёРµ РёР· СЃРїРёСЃРєР°
     for _, event_name in ipairs(events) do
         if storage.events[event_name] or DEFAULT_EVENTS[event_name] then
             handle_custom_planet_event(event_name, ship, surface)
@@ -1549,9 +1846,9 @@ local function on_custom_planet_event(event)
     end
 end
 
--- Проверка землетрясений (вызывается через on_nth_tick раз в секунду)
+-- РџСЂРѕРІРµСЂРєР° Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№ (РІС‹Р·С‹РІР°РµС‚СЃСЏ С‡РµСЂРµР· on_nth_tick СЂР°Р· РІ СЃРµРєСѓРЅРґСѓ)
 local function check_earthquakes()
-    -- Если нет ни активных землетрясений, ни потерянных уровней, отключаем on_nth_tick
+    -- Р•СЃР»Рё РЅРµС‚ РЅРё Р°РєС‚РёРІРЅС‹С… Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№, РЅРё РїРѕС‚РµСЂСЏРЅРЅС‹С… СѓСЂРѕРІРЅРµР№, РѕС‚РєР»СЋС‡Р°РµРј on_nth_tick
     if (not storage.active_earthquakes or not next(storage.active_earthquakes))
         and (not storage.lost_decks or not next(storage.lost_decks))
         and (not storage.active_magnetic_storms or not next(storage.active_magnetic_storms)) then
@@ -1578,11 +1875,11 @@ local function check_earthquakes()
     local surfaces_to_end = {}
     
     for surface_index, eq_data in pairs(storage.active_earthquakes) do
-        -- Проверяем сначала время окончания (быстрее чем проверка поверхности)
+        -- РџСЂРѕРІРµСЂСЏРµРј СЃРЅР°С‡Р°Р»Р° РІСЂРµРјСЏ РѕРєРѕРЅС‡Р°РЅРёСЏ (Р±С‹СЃС‚СЂРµРµ С‡РµРј РїСЂРѕРІРµСЂРєР° РїРѕРІРµСЂС…РЅРѕСЃС‚Рё)
         if eq_data.end_tick and now >= eq_data.end_tick then
             table.insert(surfaces_to_end, surface_index)
         elseif eq_data.end_tick then
-            -- Проверяем валидность поверхности только если время еще не прошло
+            -- РџСЂРѕРІРµСЂСЏРµРј РІР°Р»РёРґРЅРѕСЃС‚СЊ РїРѕРІРµСЂС…РЅРѕСЃС‚Рё С‚РѕР»СЊРєРѕ РµСЃР»Рё РІСЂРµРјСЏ РµС‰Рµ РЅРµ РїСЂРѕС€Р»Рѕ
             local surface = game.surfaces[surface_index]
             if not (surface and surface.valid) then
                 table.insert(surfaces_to_end, surface_index)
@@ -1594,7 +1891,7 @@ local function check_earthquakes()
         end_earthquake(si) 
     end
 
-    -- Обработка окончания "потерянных" уровней
+    -- РћР±СЂР°Р±РѕС‚РєР° РѕРєРѕРЅС‡Р°РЅРёСЏ "РїРѕС‚РµСЂСЏРЅРЅС‹С…" СѓСЂРѕРІРЅРµР№
     local surfaces_to_restore = {}
     for surface_index, ld in pairs(storage.lost_decks or {}) do
         if ld.end_tick and now >= ld.end_tick then
@@ -1610,29 +1907,31 @@ local function check_earthquakes()
 
     local storm_surfaces_to_end = {}
     for surface_index, storm_data in pairs(storage.active_magnetic_storms or {}) do
-        -- storms are now infinite, expire only if surface vanishes
         local s = game.surfaces[surface_index]
         if not (s and s.valid) then
             table.insert(storm_surfaces_to_end, surface_index)
+        else
+            update_magnetic_storm_cycle(s, storm_data, now)
         end
     end
     for _, si in ipairs(storm_surfaces_to_end) do
         end_magnetic_storm(si)
     end
     
-    -- Если после удаления землетрясений и восстановления уровней их не осталось, отключаем on_nth_tick
+    -- Р•СЃР»Рё РїРѕСЃР»Рµ СѓРґР°Р»РµРЅРёСЏ Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№ Рё РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёСЏ СѓСЂРѕРІРЅРµР№ РёС… РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ, РѕС‚РєР»СЋС‡Р°РµРј on_nth_tick
     if not next(storage.active_earthquakes)
-        and not next(storage.lost_decks or {}) then
+        and not next(storage.lost_decks or {})
+        and not next(storage.active_magnetic_storms or {}) then
         script.on_nth_tick(60, nil)
     end
 end
 
--- Обработка scheduled events (вызывается через on_tick только когда есть события)
+-- РћР±СЂР°Р±РѕС‚РєР° scheduled events (РІС‹Р·С‹РІР°РµС‚СЃСЏ С‡РµСЂРµР· on_tick С‚РѕР»СЊРєРѕ РєРѕРіРґР° РµСЃС‚СЊ СЃРѕР±С‹С‚РёСЏ)
 local function process_scheduled_events()
     local now = game.tick
     
     if not storage.scheduled_events or #storage.scheduled_events == 0 then
-        -- Если событий нет, отключаем on_tick
+        -- Р•СЃР»Рё СЃРѕР±С‹С‚РёР№ РЅРµС‚, РѕС‚РєР»СЋС‡Р°РµРј on_tick
         script.on_event(defines.events.on_tick, nil)
         return
     end
@@ -1670,28 +1969,28 @@ local function process_scheduled_events()
     
     storage.scheduled_events = remaining
     
-    -- Если после обработки событий их не осталось, отключаем on_tick
+    -- Р•СЃР»Рё РїРѕСЃР»Рµ РѕР±СЂР°Р±РѕС‚РєРё СЃРѕР±С‹С‚РёР№ РёС… РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ, РѕС‚РєР»СЋС‡Р°РµРј on_tick
     if #storage.scheduled_events == 0 then
         script.on_event(defines.events.on_tick, nil)
     end
 end
 
--- Функция для включения/выключения обработчиков на основе наличия активных событий
+-- Р¤СѓРЅРєС†РёСЏ РґР»СЏ РІРєР»СЋС‡РµРЅРёСЏ/РІС‹РєР»СЋС‡РµРЅРёСЏ РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ РЅР° РѕСЃРЅРѕРІРµ РЅР°Р»РёС‡РёСЏ Р°РєС‚РёРІРЅС‹С… СЃРѕР±С‹С‚РёР№
 update_tick_handlers = function()
     local has_scheduled = storage.scheduled_events and #storage.scheduled_events > 0
     local has_earthquakes = storage.active_earthquakes and next(storage.active_earthquakes)
     local has_lost = storage.lost_decks and next(storage.lost_decks)
-    -- storms no longer control the tick handler; they only end on warp/invalid surface
+    local has_storms = storage.active_magnetic_storms and next(storage.active_magnetic_storms)
     
-    -- Включаем on_tick только если есть scheduled events
+    -- Р’РєР»СЋС‡Р°РµРј on_tick С‚РѕР»СЊРєРѕ РµСЃР»Рё РµСЃС‚СЊ scheduled events
     if has_scheduled then
         script.on_event(defines.events.on_tick, process_scheduled_events)
     else
         script.on_event(defines.events.on_tick, nil)
     end
     
-    -- on_nth_tick нужен теперь только для землетрясений/потерянных уровней
-    if has_earthquakes or has_lost then
+    -- on_nth_tick РЅСѓР¶РµРЅ РґР»СЏ Р·РµРјР»РµС‚СЂСЏСЃРµРЅРёР№, РїРѕС‚РµСЂСЏРЅРЅС‹С… СѓСЂРѕРІРЅРµР№ Рё С†РёРєР»Р° РјР°РіРЅРёС‚РЅРѕРіРѕ С€С‚РѕСЂРјР°
+    if has_earthquakes or has_lost or has_storms then
         script.on_nth_tick(60, check_earthquakes)
     else
         script.on_nth_tick(60, nil)
@@ -1898,9 +2197,9 @@ find_safe_teleport_position = function(surface, preferred_pos)
     return nil
 end
 
--- Обработчик использования предмета экстренного возврата к кораблю
+-- РћР±СЂР°Р±РѕС‚С‡РёРє РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ РїСЂРµРґРјРµС‚Р° СЌРєСЃС‚СЂРµРЅРЅРѕРіРѕ РІРѕР·РІСЂР°С‚Р° Рє РєРѕСЂР°Р±Р»СЋ
 -- ============================================================
--- РЕГИСТРАЦИЯ ИНИЦИАЛИЗАЦИЯ
+-- Р Р•Р“РРЎРўР РђР¦РРЇ РРќРР¦РРђР›РР—РђР¦РРЇ
 -- ============================================================
 
 -- WDM ship warp event handler (only warping)
@@ -1915,10 +2214,10 @@ local function on_ship_warping(event)
     local new_biological_bonus = old_biological_bonus
 
     if old_melee_bonus > 0 then
-        new_melee_bonus = math.max(0, old_melee_bonus - 0.005)
+        new_melee_bonus = math.max(0, old_melee_bonus - 0.015)
     end
     if old_biological_bonus > 0 then
-        new_biological_bonus = math.max(0, old_biological_bonus - 0.005)
+        new_biological_bonus = math.max(0, old_biological_bonus - 0.015)
     end
 
     if new_melee_bonus ~= old_melee_bonus or new_biological_bonus ~= old_biological_bonus then
@@ -1944,7 +2243,7 @@ local function on_ship_warping(event)
         end_all_magnetic_storms()
         debug("All active magnetic storms ended due to ship warp")
 
-        -- when a ship warps we may also have left a surface with storm‑disabled entities,
+        -- when a ship warps we may also have left a surface with stormвЂ‘disabled entities,
         -- or arrived somewhere; restore them just in case
         if event and event.destination_surface and event.destination_surface.valid then
             restore_storm_disabled_on_surface(event.destination_surface.index)
@@ -1952,6 +2251,7 @@ local function on_ship_warping(event)
         end
         -- also clear any leftover records on all surfaces (quiet no-op if none)
         restore_all_storm_disabled_entities()
+        storage.storm_tracked_entities = {}
     end
 end
 
@@ -1973,7 +2273,7 @@ local function register_wdm_ship_warp_events()
     return any
 end
 
--- Регистрация обработчика события on_custom_planet_event
+-- Р РµРіРёСЃС‚СЂР°С†РёСЏ РѕР±СЂР°Р±РѕС‚С‡РёРєР° СЃРѕР±С‹С‚РёСЏ on_custom_planet_event
 local function register_wdm_custom_planet_event()
     if not remote.interfaces["WDM"] then
         debug("WDM interface not found, will retry later")
@@ -1994,34 +2294,34 @@ local function register_wdm_custom_planet_event()
     end
 end
 
--- Функция для регистрации обработчиков без изменения storage (для on_load)
+-- Р¤СѓРЅРєС†РёСЏ РґР»СЏ СЂРµРіРёСЃС‚СЂР°С†РёРё РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ Р±РµР· РёР·РјРµРЅРµРЅРёСЏ storage (РґР»СЏ on_load)
 local function register_event_handlers()
-    -- Обработчик экстренного возврата всегда активен, независимо от состояния мода
+    -- РћР±СЂР°Р±РѕС‚С‡РёРє СЌРєСЃС‚СЂРµРЅРЅРѕРіРѕ РІРѕР·РІСЂР°С‚Р° РІСЃРµРіРґР° Р°РєС‚РёРІРµРЅ, РЅРµР·Р°РІРёСЃРёРјРѕ РѕС‚ СЃРѕСЃС‚РѕСЏРЅРёСЏ РјРѕРґР°
 
     if is_mod_enabled() then
-        -- Регистрируем события в WDM
+        -- Р РµРіРёСЃС‚СЂРёСЂСѓРµРј СЃРѕР±С‹С‚РёСЏ РІ WDM
         register_wdm_planet_events()
 
-        -- Регистрируем обработчики различных событий WDM
+        -- Р РµРіРёСЃС‚СЂРёСЂСѓРµРј РѕР±СЂР°Р±РѕС‚С‡РёРєРё СЂР°Р·Р»РёС‡РЅС‹С… СЃРѕР±С‹С‚РёР№ WDM
         register_wdm_custom_planet_event()
         register_wdm_ship_warp_events()
         
-        -- on_tick и on_nth_tick будут включаться автоматически при появлении событий
-        -- через update_tick_handlers(). on_player_changed_surface также управляется там.
+        -- on_tick Рё on_nth_tick Р±СѓРґСѓС‚ РІРєР»СЋС‡Р°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїСЂРё РїРѕСЏРІР»РµРЅРёРё СЃРѕР±С‹С‚РёР№
+        -- С‡РµСЂРµР· update_tick_handlers(). on_player_changed_surface С‚Р°РєР¶Рµ СѓРїСЂР°РІР»СЏРµС‚СЃСЏ С‚Р°Рј.
         script.on_event(defines.events.on_player_joined_game, on_player_joined_game)
         
-        -- Проверяем существующие события после загрузки и включаем обработчики если нужно
+        -- РџСЂРѕРІРµСЂСЏРµРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ СЃРѕР±С‹С‚РёСЏ РїРѕСЃР»Рµ Р·Р°РіСЂСѓР·РєРё Рё РІРєР»СЋС‡Р°РµРј РѕР±СЂР°Р±РѕС‚С‡РёРєРё РµСЃР»Рё РЅСѓР¶РЅРѕ
         update_tick_handlers()
         
         debug("WDM Boss Expansion mod ENABLED - event handlers registered")
     else
-        -- Отключаем все tick-based обработчики (кроме экстренного возврата)
+        -- РћС‚РєР»СЋС‡Р°РµРј РІСЃРµ tick-based РѕР±СЂР°Р±РѕС‚С‡РёРєРё (РєСЂРѕРјРµ СЌРєСЃС‚СЂРµРЅРЅРѕРіРѕ РІРѕР·РІСЂР°С‚Р°)
         script.on_event(defines.events.on_tick, nil)
         script.on_nth_tick(60, nil)
         script.on_event(defines.events.on_player_changed_surface, nil)
         script.on_event(defines.events.on_player_joined_game, nil)
 
-        -- Отменяем регистрацию обработчиков WDM-событий
+        -- РћС‚РјРµРЅСЏРµРј СЂРµРіРёСЃС‚СЂР°С†РёСЋ РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ WDM-СЃРѕР±С‹С‚РёР№
         if remote.interfaces["WDM"] then
             local ok, id
             ok, id = pcall(function() return remote.call("WDM", "get_on_custom_planet_event") end)
@@ -2032,8 +2332,8 @@ local function register_event_handlers()
         debug("WDM Boss Expansion mod DISABLED - event handlers unregistered")
     end
 
-    -- Применяем настройку дружественного урона независимо от включенности
-    -- основных эвентов мода, т.к. она отвечает только за поведение сил.
+    -- РџСЂРёРјРµРЅСЏРµРј РЅР°СЃС‚СЂРѕР№РєСѓ РґСЂСѓР¶РµСЃС‚РІРµРЅРЅРѕРіРѕ СѓСЂРѕРЅР° РЅРµР·Р°РІРёСЃРёРјРѕ РѕС‚ РІРєР»СЋС‡РµРЅРЅРѕСЃС‚Рё
+    -- РѕСЃРЅРѕРІРЅС‹С… СЌРІРµРЅС‚РѕРІ РјРѕРґР°, С‚.Рє. РѕРЅР° РѕС‚РІРµС‡Р°РµС‚ С‚РѕР»СЊРєРѕ Р·Р° РїРѕРІРµРґРµРЅРёРµ СЃРёР».
     apply_friendly_fire_setting()
 end
 
@@ -2049,11 +2349,43 @@ local function initialize_mod()
         for surface_index, storm_data in pairs(storage.active_magnetic_storms) do
             local surface = game.surfaces[surface_index]
             if surface and surface.valid then
+                ensure_storm_entity_cache_for_surface(surface)
+
                 local storm_value = storm_data and storm_data.storm_value
                 if type(storm_value) ~= "number" then
                     storm_value = get_magnetic_storm_value(surface) or 0
+                    storm_data.storm_value = storm_value
                 end
-                apply_storm_disable_on_surface(surface, storm_value)
+
+                local current_value = storm_data.current_value
+                if type(current_value) ~= "number" then
+                    current_value = get_magnetic_storm_value(surface) or storm_value
+                    storm_data.current_value = current_value
+                end
+
+                if storm_value > STORM_REDUCTION_TRIGGER_VALUE then
+                    if current_value >= storm_value then
+                        storm_data.current_value = storm_value
+                        storm_data.reduction_end_tick = nil
+                        storm_data.next_reduction_tick = storm_data.next_reduction_tick or (game.tick + STORM_REDUCTION_INTERVAL_TICKS)
+                    else
+                        storm_data.current_value = STORM_REDUCTION_VALUE
+                        storm_data.next_reduction_tick = nil
+                        storm_data.reduction_end_tick = storm_data.reduction_end_tick or (game.tick + STORM_REDUCTION_DURATION_TICKS)
+                    end
+                else
+                    storm_data.current_value = storm_value
+                    storm_data.next_reduction_tick = nil
+                    storm_data.reduction_end_tick = nil
+                end
+
+                local effective_value = storm_data.current_value
+                set_magnetic_storm_value(surface, effective_value)
+                apply_storm_disable_delta_on_surface(surface, storm_data.base_value or 0, effective_value)
+                local cache = get_storm_surface_cache(surface.index, false)
+                if cache and effective_value > 0 and not next(cache.currently_disabled) then
+                    sync_storm_disable_state_on_surface(surface, effective_value)
+                end
             else
                 restore_storm_disabled_on_surface(surface_index)
             end
@@ -2094,7 +2426,7 @@ local function initialize_mod()
     end
 end
 
--- Обработчик изменения настроек
+-- РћР±СЂР°Р±РѕС‚С‡РёРє РёР·РјРµРЅРµРЅРёСЏ РЅР°СЃС‚СЂРѕРµРє
 local function on_runtime_mod_setting_changed(event)
     if event.setting == "wdm-expansion-event-enable" then
         debug("Setting wdm-expansion-event-enable changed, reinitializing mod...")
@@ -2113,6 +2445,7 @@ end
 local function on_entity_removed(event)
     on_crystal_mined(event)
     remove_storm_disabled_record_for_entity(event.entity)
+    remove_storm_tracked_record_for_entity(event.entity)
 end
 
 local function on_load()
@@ -2127,8 +2460,11 @@ return {
     on_load = on_load,
     on_entity_built = on_entity_built,
     on_entity_removed = on_entity_removed,
+    reset_crystal_mined_bonuses = reset_crystal_mined_bonuses,
     on_runtime_mod_setting_changed = on_runtime_mod_setting_changed,
     find_safe_teleport_position = function(surface, preferred_pos)
         return find_safe_teleport_position(surface, preferred_pos)
     end
 }
+
+

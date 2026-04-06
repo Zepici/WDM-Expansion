@@ -27,3 +27,6 @@ utils.add_data(require("prototypes.entity.crystal"))
 utils.add_data(require("prototypes.items.crystal"))
 utils.add_data(require("prototypes.recipes.crystal"))
 utils.add_data(require("prototypes.technologies.crystal"))
+
+-- Звуки
+utils.add_data(require("prototypes.other.sounds"))

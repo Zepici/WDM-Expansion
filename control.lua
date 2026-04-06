@@ -108,6 +108,43 @@ commands.add_command("wdm-refresh-pirate-blueprints", "Re-apply WDM pirate ship 
     log(message)
 end)
 
+commands.add_command("wdm-reset-crystal-bonuses", "Reset enemy bonuses gained from mined crystals.", function(command)
+    local player = command.player_index and game and game.get_player(command.player_index) or nil
+
+    if player and player.valid and not player.admin then
+        player.print("Only admins can use /wdm-reset-crystal-bonuses.")
+        return
+    end
+
+    local ok, old_melee_bonus, old_biological_bonus = pcall(function()
+        return planetary_events.reset_crystal_mined_bonuses()
+    end)
+
+    if not ok then
+        local message = "Failed to reset crystal mined bonuses."
+        if player and player.valid then
+            player.print(message)
+        else
+            log(message)
+        end
+        log("[WDM Expansion] " .. tostring(old_melee_bonus))
+        return
+    end
+
+    local message = string.format(
+        "Crystal mined bonuses reset. Old values: melee %.2f%%, biological %.2f%%.",
+        (old_melee_bonus or 0) * 100,
+        (old_biological_bonus or 0) * 100
+    )
+
+    if player and player.valid then
+        player.print(message)
+        return
+    end
+
+    log(message)
+end)
+
 local function register_wdm_pirate_ship_spawned_handler()
     if not remote.interfaces["WDM"] then return false end
     local ok, event_id = pcall(function()

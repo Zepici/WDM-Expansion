@@ -1,4 +1,25 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.15
+Date: 2026-04-05
+  Bugfixes:
+    - Fixed command 
+---------------------------------------------------------------------------------------------------
+Version: 0.1.14
+Date: 2026-04-05
+  Features:
+    - Added admin command to reset enemy damage bonuses gained from mined crystals.
+  Bugfixes:
+    - Fixed Magnetic Storm behavior on older save files.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.13
+Date: 2026-04-05
+  Changes:
+    - Magnetic Storm now periodically weakens and then restores its strength while the event is active.
+    - Added a sound cue when the Magnetic Storm changes state.
+  Balancing:
+    - Increased the enemy damage bonus gained from mined crystals by 3x.
+    - Increased the crystal bonus decay on ship warp by 3x.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.12
 Date: 2026-04-04
   Ease of use:
