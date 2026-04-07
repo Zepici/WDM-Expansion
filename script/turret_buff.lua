@@ -82,6 +82,15 @@ local function has_entity_prototype(name)
     return false
 end
 
+local function get_entity_quality(entity)
+    if not (entity and entity.valid) then return nil end
+    local quality = entity.quality
+    if quality and quality.valid and quality.name then
+        return quality.name
+    end
+    return quality
+end
+
 local function remove_red_concrete_bonus_label(unit_number)
     local labels = storage.red_concrete_bonus_labels
     if not (labels and unit_number) then return end
@@ -163,6 +172,7 @@ local function swap_turret_entity(turret, target_name)
         name = target_name,
         position = turret.position,
         force = turret.force,
+        quality = get_entity_quality(turret),
         direction = turret.direction,
         fast_replace = true,
         spill = false,
@@ -180,6 +190,7 @@ local function swap_turret_entity(turret, target_name)
     local old_force = turret.force
     local old_surface = turret.surface
     local old_position = turret.position
+    local old_quality = get_entity_quality(turret)
 
     local old_ammo_inventory = turret.get_inventory(defines.inventory.turret_ammo)
     if old_ammo_inventory and old_ammo_inventory.valid then
@@ -192,6 +203,7 @@ local function swap_turret_entity(turret, target_name)
         name = target_name,
         position = old_position,
         force = old_force,
+        quality = old_quality,
         direction = old_direction,
         spill = false,
         create_build_effect_smoke = false,

@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.17
+Date: 2026-04-06
+  Bugfixes:
+    - Turrets placed on red refined concrete now preserve their quality when switching to the buffed variant.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.16
 Date: 2026-04-06
   Changes:
