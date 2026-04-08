@@ -3,6 +3,7 @@ local heat_pipes = require("script.heat_pipes")
 local turret_buff = require("script.turret_buff")
 local emergency_return = require("script.emergency_return")
 local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
+local mod_commands = require("script.commands")
 
 emergency_return.init({
     find_safe_teleport_position = planetary_events.find_safe_teleport_position
@@ -27,6 +28,11 @@ local function on_entity_removed(event)
     safe_call(turret_buff.on_entity_removed, event)
 end
 
+local function on_object_destroyed(event)
+    safe_call(heat_pipes.on_object_destroyed, event)
+    safe_call(planetary_events.on_object_destroyed, event)
+end
+
 local function register_shared_event_handlers()
     script.on_event(defines.events.on_built_entity, on_entity_built)
     script.on_event(defines.events.on_robot_built_entity, on_entity_built)
@@ -37,10 +43,16 @@ local function register_shared_event_handlers()
         script.on_event(defines.events.on_space_platform_built_entity, on_entity_built)
     end
 
-    script.on_event(defines.events.on_entity_died, on_entity_removed)
+--    script.on_event(defines.events.on_entity_died, on_entity_removed)
+    script.on_event(
+        defines.events.on_post_entity_died,
+        turret_buff.on_post_entity_died,
+        turret_buff.get_post_entity_died_filters()
+    )
     script.on_event(defines.events.on_player_mined_entity, on_entity_removed)
     script.on_event(defines.events.on_robot_mined_entity, on_entity_removed)
     script.on_event(defines.events.script_raised_destroy, on_entity_removed)
+    script.on_event(defines.events.on_object_destroyed, on_object_destroyed)
 
     if defines.events.on_space_platform_mined_entity then
         script.on_event(defines.events.on_space_platform_mined_entity, on_entity_removed)
@@ -71,79 +83,10 @@ local function on_wdm_pirate_ship_spawned(_event)
     register_wdm_blueprint_overrides()
 end
 
-commands.add_command("wdm-refresh-pirate-blueprints", "Re-apply WDM pirate ship blueprint overrides.", function(command)
-    local player = command.player_index and game and game.get_player(command.player_index) or nil
-    local debug_fn = function(message)
-        if player and player.valid then
-            player.print(message)
-        else
-            log(message)
-        end
-    end
-
-    local ok, applied = pcall(function()
-        return register_wdm_blueprint_overrides(debug_fn)
-    end)
-
-    if not ok then
-        local message = "Failed to refresh WDM pirate ship blueprint overrides."
-        if player and player.valid then
-            player.print(message)
-        else
-            log(message)
-        end
-        log("[WDM Expansion] " .. tostring(applied))
-        return
-    end
-
-    local message = applied
-        and "WDM pirate ship blueprint overrides refreshed."
-        or "WDM pirate ship blueprint overrides were not refreshed."
-
-    if player and player.valid then
-        player.print(message)
-        return
-    end
-
-    log(message)
-end)
-
-commands.add_command("wdm-reset-crystal-bonuses", "Reset enemy bonuses gained from mined crystals.", function(command)
-    local player = command.player_index and game and game.get_player(command.player_index) or nil
-
-    if player and player.valid and not player.admin then
-        player.print("Only admins can use /wdm-reset-crystal-bonuses.")
-        return
-    end
-
-    local ok, old_melee_bonus, old_biological_bonus = pcall(function()
-        return planetary_events.reset_crystal_mined_bonuses()
-    end)
-
-    if not ok then
-        local message = "Failed to reset crystal mined bonuses."
-        if player and player.valid then
-            player.print(message)
-        else
-            log(message)
-        end
-        log("[WDM Expansion] " .. tostring(old_melee_bonus))
-        return
-    end
-
-    local message = string.format(
-        "Crystal mined bonuses reset. Old values: melee %.2f%%, biological %.2f%%.",
-        (old_melee_bonus or 0) * 100,
-        (old_biological_bonus or 0) * 100
-    )
-
-    if player and player.valid then
-        player.print(message)
-        return
-    end
-
-    log(message)
-end)
+mod_commands.register({
+    planetary_events = planetary_events,
+    register_wdm_blueprint_overrides = register_wdm_blueprint_overrides
+})
 
 local function register_wdm_pirate_ship_spawned_handler()
     if not remote.interfaces["WDM"] then return false end

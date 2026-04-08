@@ -1,6 +1,6 @@
 local utils = require("utils")
 require("prototypes.entity.turret_buff")
-utils.add_data(require("prototypes.items.turret_buff"))
+require("prototypes.items.turret_buff")
 
 local wdm_difficulty_setting = data.raw["int-setting"] and data.raw["int-setting"]["wdm-difficulty-level"]
 if wdm_difficulty_setting then

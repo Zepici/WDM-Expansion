@@ -75,7 +75,9 @@ return {
         turret_base_has_direction = true,
         prepare_range = 40,
         collision_box = { { -1.2, -1.2 }, { 1.2, 1.2 } },
-
+        resistances = {
+            _replace = true
+        },
         attack_parameters = {
             cooldown = 150,
             projectile_creation_distance = 0,

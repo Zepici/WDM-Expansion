@@ -1,4 +1,30 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.19
+Date: 2026-04-09
+  Bugfixes:
+    - Crystals temporarily do not apply a bonus to enemies when destroyed.
+    - Removed damage resistance from the player's laser cannon.
+  Ease of use:
+    - Hidden extra turrets in factioriopedia.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.18
+Date: 2026-04-08
+  Sounds:
+    - Reduced the volume of the electric beam sound slightly.
+    - Reduced blaster cannon explosion volume.
+  Balancing:
+    - Increased the recipe output of linked heat pipes from 1 to 2.
+    - Now the proportion of generator operation during a magnetic storm is not 1/6, but 1/4.
+  Bugfixes:
+    - Linked heat pipes now equalize heat by averaging their temperatures instead of copying only the hottest value.
+    - Fixed a bug that prevented drones from repairing upgraded turrets on red refined concrete. Destroying such a turret now creates a ghost of the base version, which can be automatically built by drones.
+  Scripting:
+    - Moved custom console command registration into a separate script module.
+    - The on_entity_died event has been replaced by on_object_destroyed and on_post_entity_died.
+  Optimizations:
+    - Improved optimization by removing the on_entity_died event.
+    - Magnetic storm event operation has been optimized.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.17
 Date: 2026-04-06
   Bugfixes:

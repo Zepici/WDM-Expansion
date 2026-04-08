@@ -55,7 +55,7 @@ local DEFAULT_EVENTS = {
         waves = { min = 1, max = 3 },
         wave_min_delay_seconds = 30,
         wave_max_delay_seconds = 120,
-        tech_influence = 0.5,
+        tech_influence = 0.6,
         tech_tiers = nil
     },
     earthquake = {
@@ -257,15 +257,15 @@ end
 
 local STORM_REDUCTION_TRIGGER_VALUE = 50
 local STORM_REDUCTION_VALUE = 40
-local STORM_REDUCTION_INTERVAL_TICKS = 120 * 60
+local STORM_REDUCTION_INTERVAL_TICKS = 80 * 60
 local STORM_REDUCTION_DURATION_TICKS = 20 * 60
 
 local STORM_DISABLE_THRESHOLDS_BY_TYPE = {
-    ["accumulator"] = 25,
-    ["solar-panel"] = 45,
+--    ["accumulator"] = 25,
+--    ["solar-panel"] = 45,
     ["generator"] = 55,
-    ["fusion-generator"] = 65,
-    ["electric-pole"] = 75
+    ["fusion-generator"] = 65
+--    ["electric-pole"] = 75
 }
 
 local STORM_DISABLE_ENTITY_TYPES = {
@@ -274,7 +274,7 @@ local STORM_DISABLE_ENTITY_TYPES = {
     "generator",
     "fusion-generator",
     "electric-pole"
-}
+} 
 
 local STORM_DISABLE_EXCLUDED_NAMES = {
     ["ring-teleporter"] = true
@@ -299,6 +299,13 @@ local function get_storm_surface_cache(surface_index, create_if_missing)
         storage.storm_tracked_entities[surface_index] = cache
     end
     return cache
+end
+
+local function init_storm_destroy_registrations()
+    storage.storm_destroy_registrations = storage.storm_destroy_registrations or {
+        by_registration = {}, -- [registration_number] = {surface_index, key}
+        by_key = {} -- [key] = registration_number
+    }
 end
 
 local function make_storm_entity_record_key(entity)
@@ -326,6 +333,40 @@ local function make_storm_entity_record(entity)
     }
 end
 
+local function unregister_storm_destroy_registration_by_key(key)
+    if not (storage and storage.storm_destroy_registrations and key) then return end
+    local registrations = storage.storm_destroy_registrations
+    local registration_number = registrations.by_key[key]
+    if registration_number then
+        registrations.by_key[key] = nil
+        registrations.by_registration[registration_number] = nil
+    end
+end
+
+local function register_storm_destroy_tracking(entity, record)
+    if not (entity and entity.valid and record and record.key) then return end
+    init_storm_destroy_registrations()
+
+    local registrations = storage.storm_destroy_registrations
+    local existing = registrations.by_key[record.key]
+    if existing then
+        registrations.by_registration[existing] = {
+            surface_index = entity.surface.index,
+            key = record.key
+        }
+        return
+    end
+
+    local registration_number = script.register_on_object_destroyed(entity)
+    if registration_number then
+        registrations.by_key[record.key] = registration_number
+        registrations.by_registration[registration_number] = {
+            surface_index = entity.surface.index,
+            key = record.key
+        }
+    end
+end
+
 local function add_storm_tracked_entity(entity)
     if not (entity and entity.valid and entity.surface and entity.surface.valid) then return nil end
 
@@ -338,6 +379,7 @@ local function add_storm_tracked_entity(entity)
     if existing then
         existing.entity = entity
         existing.threshold = threshold
+        register_storm_destroy_tracking(entity, existing)
         return existing, threshold
     end
 
@@ -345,6 +387,7 @@ local function add_storm_tracked_entity(entity)
     cache.all[key] = record
     cache.tracked_by_threshold[threshold] = cache.tracked_by_threshold[threshold] or {}
     cache.tracked_by_threshold[threshold][key] = record
+    register_storm_destroy_tracking(entity, record)
     return record, threshold
 end
 
@@ -496,15 +539,24 @@ local function remove_storm_disabled_record_for_entity(entity)
     cache.currently_disabled[make_storm_entity_record_key(entity)] = nil
 end
 
-local function remove_storm_tracked_record_for_entity(entity)
-    if not (entity and entity.valid and entity.surface and entity.surface.valid) then return end
-    local surface_index = entity.surface.index
+local function remove_storm_records_by_key(surface_index, key)
+    if not (surface_index and key) then return end
     local cache = get_storm_surface_cache(surface_index, false)
-    if not cache then return end
+    if not cache then
+        unregister_storm_destroy_registration_by_key(key)
+        return
+    end
 
-    local key = make_storm_entity_record_key(entity)
+    cache.currently_disabled[key] = nil
+
     local record = cache.all[key]
-    if not record then return end
+    if not record then
+        unregister_storm_destroy_registration_by_key(key)
+        if not next(cache.all) then
+            storage.storm_tracked_entities[surface_index] = nil
+        end
+        return
+    end
 
     cache.all[key] = nil
     local threshold_bucket = cache.tracked_by_threshold[record.threshold]
@@ -514,11 +566,18 @@ local function remove_storm_tracked_record_for_entity(entity)
             cache.tracked_by_threshold[record.threshold] = nil
         end
     end
-    cache.currently_disabled[key] = nil
+
+    unregister_storm_destroy_registration_by_key(key)
 
     if not next(cache.all) then
         storage.storm_tracked_entities[surface_index] = nil
     end
+end
+
+local function remove_storm_tracked_record_for_entity(entity)
+    if not (entity and entity.valid and entity.surface and entity.surface.valid) then return end
+    local key = make_storm_entity_record_key(entity)
+    remove_storm_records_by_key(entity.surface.index, key)
 end
 
 local function restore_storm_disabled_on_surface(surface_index)
@@ -571,6 +630,25 @@ local function apply_storm_disable_to_built_entity(entity)
     end
 end
 
+local function rebuild_storm_destroy_registrations()
+    init_storm_destroy_registrations()
+    storage.storm_destroy_registrations.by_registration = {}
+    storage.storm_destroy_registrations.by_key = {}
+
+    for surface_index, cache in pairs(storage.storm_tracked_entities or {}) do
+        if cache and cache.all then
+            for key, record in pairs(cache.all) do
+                local entity = record and record.entity
+                if entity and entity.valid and entity.surface and entity.surface.valid then
+                    register_storm_destroy_tracking(entity, record)
+                else
+                    remove_storm_records_by_key(surface_index, key)
+                end
+            end
+        end
+    end
+end
+
 -- ============================================================
 -- STORAGE (EVENTS)
 -- ============================================================
@@ -582,9 +660,14 @@ local function init_event_storage()
     storage.lost_decks = storage.lost_decks or {}
     storage.active_magnetic_storms = storage.active_magnetic_storms or {}
     storage.storm_tracked_entities = storage.storm_tracked_entities or {}
+    init_storm_destroy_registrations()
     storage.crystal_overgrowth_active = storage.crystal_overgrowth_active or {}
     storage.crystal_overgrowth_blocked_zones = storage.crystal_overgrowth_blocked_zones or {}
     storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
+    storage.crystal_destroy_registrations = storage.crystal_destroy_registrations or {
+        by_registration = {}, -- [registration_number] = {key, bonus_override}
+        by_key = {} -- [key] = registration_number
+    }
     storage.enemy_melee_damage_bonus = storage.enemy_melee_damage_bonus or 0
     storage.enemy_biological_damage_bonus = storage.enemy_biological_damage_bonus or 0
 end
@@ -615,14 +698,48 @@ local function make_crystal_bonus_key(entity)
     }, ":")
 end
 
-local function register_crystal_bonus_override(entity)
+local function get_crystal_bonus_override_value(entity)
     if not (entity and entity.valid and entity.name == "crystal" and entity.surface and entity.surface.valid) then return end
     local ok, tile = pcall(function() return entity.surface.get_tile(entity.position) end)
-    if not (ok and tile and tile.valid and tile.name and SPECIAL_CRYSTAL_BONUS_TILES[tile.name]) then return end
+    if not (ok and tile and tile.valid and tile.name and SPECIAL_CRYSTAL_BONUS_TILES[tile.name]) then return nil end
+    return CRYSTAL_LOW_BONUS
+end
+
+local function clear_crystal_destroy_registration_by_key(key)
+    if not (storage and storage.crystal_destroy_registrations and key) then return end
+    local registrations = storage.crystal_destroy_registrations
+    local registration_number = registrations.by_key[key]
+    if registration_number then
+        registrations.by_key[key] = nil
+        registrations.by_registration[registration_number] = nil
+    end
+end
+
+local function register_crystal_bonus_override(entity)
+    if not (entity and entity.valid and entity.name == "crystal" and entity.surface and entity.surface.valid) then return end
     storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
+    storage.crystal_destroy_registrations = storage.crystal_destroy_registrations or {
+        by_registration = {},
+        by_key = {}
+    }
+
     local key = make_crystal_bonus_key(entity)
-    if key then
-        storage.crystal_bonus_overrides[key] = CRYSTAL_LOW_BONUS
+    if not key then return end
+
+    local bonus_override = get_crystal_bonus_override_value(entity)
+    if bonus_override ~= nil then
+        storage.crystal_bonus_overrides[key] = bonus_override
+    end
+
+    clear_crystal_destroy_registration_by_key(key)
+
+    local registration_number = script.register_on_object_destroyed(entity)
+    if registration_number then
+        storage.crystal_destroy_registrations.by_key[key] = registration_number
+        storage.crystal_destroy_registrations.by_registration[registration_number] = {
+            key = key,
+            bonus_override = bonus_override
+        }
     end
 end
 
@@ -633,6 +750,24 @@ local function take_crystal_bonus_override(entity)
     local bonus = storage.crystal_bonus_overrides[key]
     storage.crystal_bonus_overrides[key] = nil
     return bonus
+end
+
+local function consume_crystal_destroy_registration_by_key(key)
+    if not (storage and storage.crystal_destroy_registrations and key) then return nil end
+    local registrations = storage.crystal_destroy_registrations
+    local registration_number = registrations.by_key[key]
+    if not registration_number then return nil end
+
+    registrations.by_key[key] = nil
+    local record = registrations.by_registration[registration_number]
+    registrations.by_registration[registration_number] = nil
+    return record
+end
+
+local function consume_crystal_destroy_registration_for_entity(entity)
+    local key = make_crystal_bonus_key(entity)
+    if not key then return nil end
+    return consume_crystal_destroy_registration_by_key(key)
 end
 
 -- ============================================================
@@ -1681,18 +1816,13 @@ ensure_crystal_tick = function()
     script.on_nth_tick(storage.crystal_growth_interval, crystal_growth_tick)
 end
 
--- Apply melee and biological buffs when crystal is mined
-local function on_crystal_mined(event)
-    local entity = event.entity
-    if not (entity and entity.valid) then return end
-    if entity.name ~= "crystal" then return end
-
+local function apply_crystal_mined_bonus(bonus_override)
     local ev = storage.events and storage.events.crystal_overgrowth or DEFAULT_EVENTS.crystal_overgrowth
     local bonus = (ev and ev.enemy_bonus_per_crystal) or 0.09
-    local bonus_override = take_crystal_bonus_override(entity)
     if type(bonus_override) == "number" then
         bonus = bonus_override
     end
+
     storage.enemy_melee_damage_bonus = (storage.enemy_melee_damage_bonus or 0) + bonus
     storage.enemy_biological_damage_bonus = (storage.enemy_biological_damage_bonus or 0) + bonus
 
@@ -1705,6 +1835,17 @@ local function on_crystal_mined(event)
     game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
     debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus)
         .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus))
+end
+
+-- Apply melee and biological buffs when crystal is mined
+local function on_crystal_mined(event)
+    local entity = event.entity
+    if not (entity and entity.valid) then return end
+    if entity.name ~= "crystal" then return end
+
+    local destroy_record = consume_crystal_destroy_registration_for_entity(entity)
+    local bonus_override = destroy_record and destroy_record.bonus_override or take_crystal_bonus_override(entity)
+    apply_crystal_mined_bonus(bonus_override)
 end
 
 local function apply_enemy_damage_bonuses()
@@ -2339,6 +2480,7 @@ end
 
 local function initialize_mod()
     init_event_storage()
+    rebuild_storm_destroy_registrations()
     sync_default_events()
     register_event_handlers()
     if storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
@@ -2439,6 +2581,7 @@ end
 
 local function on_entity_built(event)
     local entity = event.entity or event.created_entity
+--    register_crystal_bonus_override(entity)
     apply_storm_disable_to_built_entity(entity)
 end
 
@@ -2446,6 +2589,32 @@ local function on_entity_removed(event)
     on_crystal_mined(event)
     remove_storm_disabled_record_for_entity(event.entity)
     remove_storm_tracked_record_for_entity(event.entity)
+end
+
+local function on_object_destroyed(event)
+    local crystal_registrations = storage and storage.crystal_destroy_registrations
+    if crystal_registrations then
+        local crystal_record = crystal_registrations.by_registration[event.registration_number]
+        if crystal_record then
+            crystal_registrations.by_registration[event.registration_number] = nil
+            if crystal_record.key then
+                crystal_registrations.by_key[crystal_record.key] = nil
+                if storage.crystal_bonus_overrides then
+                    storage.crystal_bonus_overrides[crystal_record.key] = nil
+                end
+            end
+            -- Temporarily disable crystal bonus growth from on_object_destroyed.
+            -- apply_crystal_mined_bonus(crystal_record.bonus_override)
+            return
+        end
+    end
+
+    local registrations = storage and storage.storm_destroy_registrations
+    if not registrations then return end
+
+    local record = registrations.by_registration[event.registration_number]
+    if not record then return end
+    remove_storm_records_by_key(record.surface_index, record.key)
 end
 
 local function on_load()
@@ -2460,6 +2629,7 @@ return {
     on_load = on_load,
     on_entity_built = on_entity_built,
     on_entity_removed = on_entity_removed,
+    on_object_destroyed = on_object_destroyed,
     reset_crystal_mined_bonuses = reset_crystal_mined_bonuses,
     on_runtime_mod_setting_changed = on_runtime_mod_setting_changed,
     find_safe_teleport_position = function(surface, preferred_pos)

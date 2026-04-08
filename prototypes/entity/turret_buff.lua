@@ -9,6 +9,8 @@ local function add_buffed_variants_for_type(turret_type)
         if string.sub(name, 1, #BUFFED_PREFIX) ~= BUFFED_PREFIX then
             local copy = table.deepcopy(turret)
             copy.name = BUFFED_PREFIX .. name
+            copy.hidden = true
+            copy.hidden_in_factoriopedia = true
             copy.localised_name = turret.localised_name or {"entity-name." .. name}
             if turret.localised_description then
                 copy.localised_description = {

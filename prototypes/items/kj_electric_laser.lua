@@ -5,6 +5,8 @@ return {
         place_result = "kj_electric_laser",
         icon_size = 128,
         order = "j",
+        hidden = true,
+        hidden_in_factoriopedia = true
     },
     {
         _base = data.raw["item-with-entity-data"]["kj_laser"],

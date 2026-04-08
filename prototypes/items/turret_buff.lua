@@ -24,6 +24,8 @@ local function add_item_variants_for_type(turret_type)
             if source_item then
                 local copy = table.deepcopy(source_item)
                 copy.name = BUFFED_PREFIX .. source_item.name
+                copy.hidden = true
+                copy.hidden_in_factoriopedia = true
                 copy.place_result = BUFFED_PREFIX .. name
                 copy.localised_name = source_item.localised_name or {"item-name." .. source_item.name}
 
@@ -47,4 +49,6 @@ end
 add_item_variants_for_type("ammo-turret")
 add_item_variants_for_type("electric-turret")
 
-return variants
+if #variants > 0 then
+    data:extend(variants)
+end

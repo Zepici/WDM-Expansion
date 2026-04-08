@@ -89,6 +89,48 @@ data.raw["ammo"]["kj_laser_normal"].ammo_type.action.range = 70
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.range = 70
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.width = 6
 data.raw["fluid"]["warponium-fluid"].subgroup = "fluid"
+data.raw["item-with-entity-data"]["kj_laser"].hidden = true
+data.raw["item-with-entity-data"]["kj_laser"].hidden_in_factoriopedia = true
+data.raw["recipe"]["kj_laser"].hidden = true
+data.raw["recipe"]["kj_laser"].hidden_in_factoriopedia = true
+data.raw["ammo-turret"]["kj_laser"].hidden = true
+data.raw["ammo-turret"]["kj_laser"].hidden_in_factoriopedia = true
+data.raw["electric-turret"]["kj_electric_laser"].hidden = true
+data.raw["electric-turret"]["kj_electric_laser"].hidden_in_factoriopedia = true
+
+
+local function scale_sound_volume(sound, multiplier)
+    if type(sound) ~= "table" then return end
+
+    if sound.volume then
+        sound.volume = sound.volume * multiplier
+    end
+
+    if sound.min_volume then
+        sound.min_volume = sound.min_volume * multiplier
+    end
+
+    if sound.max_volume then
+        sound.max_volume = sound.max_volume * multiplier
+    end
+
+    for _, value in pairs(sound) do
+        if type(value) == "table" then
+            scale_sound_volume(value, multiplier)
+        end
+    end
+end
+
+if mods["space-age"] then
+    local base_explosion = data.raw["explosion"]["cyborg_electric_projectile_explosion"]
+
+    if base_explosion and not data.raw["explosion"]["wdm-cyborg_electric_projectile_explosion_quiet"] then
+        local quiet_explosion = table.deepcopy(base_explosion)
+        quiet_explosion.name = "wdm-cyborg_electric_projectile_explosion_quiet"
+        scale_sound_volume(quiet_explosion.sound, 0.7)
+        data:extend({ quiet_explosion })
+    end
+end
 
 local proj = data.raw["artillery-projectile"]["wdm-blast-projectile"]
 
@@ -101,7 +143,7 @@ if proj then
     -- Определяем entity_name для взрыва в зависимости от модов
     local explosion_entity_name
     if mods["space-age"] then
-        explosion_entity_name = "cyborg_electric_projectile_explosion"
+        explosion_entity_name = "wdm-cyborg_electric_projectile_explosion_quiet"
     else
         explosion_entity_name = "medium-explosion"  -- или другой ванильный взрыв
     end

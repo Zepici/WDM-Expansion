@@ -11,7 +11,7 @@ return {
             {type = "item", name = "engine-unit", amount = 10}
         },
         results = {
-            {type = "item", name = "linked-heat-pipe-1", amount = 1}
+            {type = "item", name = "linked-heat-pipe-1", amount = 2}
         }
     },
     {
@@ -25,7 +25,7 @@ return {
             {type = "item", name = "battery", amount = 10}
         },
         results = {
-            {type = "item", name = "linked-heat-pipe-2", amount = 1}
+            {type = "item", name = "linked-heat-pipe-2", amount = 2}
         }
     },
     {
@@ -42,7 +42,7 @@ return {
 
         },
         results = {
-            {type = "item", name = "linked-heat-pipe-3", amount = 1}
+            {type = "item", name = "linked-heat-pipe-3", amount = 2}
         }
     },
     {
@@ -57,7 +57,7 @@ return {
             {type = "item", name = "warponium-plate", amount = 10}
         },
         results = {
-            {type = "item", name = "linked-heat-pipe-4", amount = 1}
+            {type = "item", name = "linked-heat-pipe-4", amount = 2}
         }
     }
 }

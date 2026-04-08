@@ -9,6 +9,10 @@ local RED_CONCRETE_BONUS_LABEL_TEXT = {
     math.floor(RED_CONCRETE_DAMAGE_BONUS * 100),
     math.floor(RED_CONCRETE_FIRE_RATE_BONUS * 100)
 }
+local POST_ENTITY_DIED_FILTERS = {
+    {filter = "type", type = "ammo-turret"},
+    {filter = "type", type = "electric-turret"}
+}
 local SUPPORTED_TURRET_TYPES = {
     ["ammo-turret"] = true,
     ["electric-turret"] = true
@@ -85,10 +89,39 @@ end
 local function get_entity_quality(entity)
     if not (entity and entity.valid) then return nil end
     local quality = entity.quality
-    if quality and quality.valid and quality.name then
+    if type(quality) == "table" then
+        if quality.valid and quality.name then
+            return quality.name
+        end
         return quality.name
     end
     return quality
+end
+
+local function get_quality_name(quality)
+    if type(quality) == "table" then
+        if quality.valid and quality.name then
+            return quality.name
+        end
+        return quality.name
+    end
+    return quality
+end
+
+local function create_entity_ghost(surface, position, direction, force, inner_name, quality, tags)
+    return surface.create_entity{
+        name = "entity-ghost",
+        inner_name = inner_name,
+        position = position,
+        direction = direction,
+        force = force,
+        quality = get_quality_name(quality),
+        tags = tags,
+        raise_built = false,
+        create_build_effect_smoke = false,
+        spawn_decorations = false,
+        preserve_ghosts_and_corpses = true
+    }
 end
 
 local function remove_red_concrete_bonus_label(unit_number)
@@ -352,6 +385,42 @@ function turret_buff.on_entity_removed(event)
     if entity and entity.unit_number then
         remove_red_concrete_bonus_label(entity.unit_number)
     end
+end
+
+function turret_buff.get_post_entity_died_filters()
+    return POST_ENTITY_DIED_FILTERS
+end
+
+function turret_buff.on_post_entity_died(event)
+    local prototype = event and event.prototype
+    local prototype_name = prototype and prototype.name
+    if not prototype_name then return end
+    if string.sub(prototype_name, 1, #BUFFED_PREFIX) ~= BUFFED_PREFIX then return end
+
+    local ghost = event.ghost
+    if not (ghost and ghost.valid and ghost.name == "entity-ghost") then return end
+
+    local base_name = get_base_name(prototype_name)
+    if base_name == prototype_name or ghost.ghost_name == base_name then return end
+
+    local surface = ghost.surface
+    if not (surface and surface.valid) then return end
+
+    local position = ghost.position
+    local direction = ghost.direction
+    local force = ghost.force
+    local quality = event.quality or ghost.quality
+    local tags = ghost.tags
+    local original_ghost_name = ghost.ghost_name
+
+    ghost.destroy()
+
+    local created = create_entity_ghost(surface, position, direction, force, base_name, quality, tags)
+    if created and created.valid then
+        return
+    end
+
+    create_entity_ghost(surface, position, direction, force, original_ghost_name, quality, tags)
 end
 
 function turret_buff.on_tiles_changed(event)
