@@ -3,6 +3,7 @@ local heat_pipes = require("script.heat_pipes")
 local turret_buff = require("script.turret_buff")
 local emergency_return = require("script.emergency_return")
 local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
+local change_events = require("script.change_events")
 local mod_commands = require("script.commands")
 
 emergency_return.init({
@@ -31,6 +32,10 @@ end
 local function on_object_destroyed(event)
     safe_call(heat_pipes.on_object_destroyed, event)
     safe_call(planetary_events.on_object_destroyed, event)
+end
+
+local function on_surface_deleted(event)
+    safe_call(planetary_events.on_surface_deleted, event)
 end
 
 local function register_shared_event_handlers()
@@ -65,6 +70,12 @@ local function register_shared_event_handlers()
     script.on_event(defines.events.script_raised_set_tiles, turret_buff.on_tiles_changed)
 
     script.on_event(defines.events.on_player_used_capsule, emergency_return.on_player_used_capsule)
+
+    if defines.events.on_pre_surface_deleted then
+        script.on_event(defines.events.on_pre_surface_deleted, on_surface_deleted)
+    elseif defines.events.on_surface_deleted then
+        script.on_event(defines.events.on_surface_deleted, on_surface_deleted)
+    end
 end
 
 local function register_wdm_blueprint_overrides()
@@ -111,6 +122,7 @@ script.on_init(function()
     planetary_events.initialize_mod()
     heat_pipes.on_init_or_configuration_changed()
     turret_buff.on_init_or_configuration_changed()
+    change_events.apply_default_event_overrides()
     randomize_wdm_blueprint_overrides()
     apply_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
@@ -121,6 +133,7 @@ script.on_configuration_changed(function(_cfg)
     planetary_events.initialize_mod()
     heat_pipes.on_init_or_configuration_changed()
     turret_buff.on_init_or_configuration_changed()
+    change_events.apply_default_event_overrides()
     register_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()

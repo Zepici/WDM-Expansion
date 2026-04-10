@@ -139,12 +139,20 @@ mini_turret.energy_source = {
 
 data:extend({ mini_turret, mini_item })
 
+local scaled_boss_loot = deepcopy(data.raw.unit["maf-boss-biter-1"].loot or {})
+for _, drop in pairs(scaled_boss_loot) do
+    if drop.probability then
+        drop.probability = drop.probability / 1.2
+    end
+end
+
 for tier = 1, 10 do
     local turret = deepcopy(base_turret)
     local ammo = deepcopy(base_ammo)
     local target_laser_damage = base_laser_damage + (tier * 220)
 
     turret.name = "kj_electric_laser_t" .. tier
+    turret.loot = deepcopy(scaled_boss_loot)
     turret.minable = nil -- чтобы игрок не мог разобрать
     turret.max_health = base_turret.max_health * tier                        -- здоровье растёт
     turret.rotation_speed = base_turret.rotation_speed + (tier * 0.001)     -- чуть быстрее крутится

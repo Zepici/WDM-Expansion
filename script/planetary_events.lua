@@ -656,6 +656,7 @@ end
 local function init_event_storage()
     storage.events = storage.events or {}
     storage.scheduled_events = storage.scheduled_events or {}
+    storage.triggered_surface_events = storage.triggered_surface_events or {}
     storage.active_earthquakes = storage.active_earthquakes or {}
     storage.lost_decks = storage.lost_decks or {}
     storage.active_magnetic_storms = storage.active_magnetic_storms or {}
@@ -670,6 +671,98 @@ local function init_event_storage()
     }
     storage.enemy_melee_damage_bonus = storage.enemy_melee_damage_bonus or 0
     storage.enemy_biological_damage_bonus = storage.enemy_biological_damage_bonus or 0
+end
+
+local function is_surface_event_repeat_persistent(event_name)
+    return event_name == "bright_day" or event_name == "electromagnetic_storm"
+end
+
+local function get_triggered_surface_event_scope_key(surface, ship)
+    if surface and surface.valid and surface.name then
+        return "surface:" .. tostring(surface.name)
+    end
+    return nil
+end
+
+local function has_surface_event_been_triggered(surface, ship, event_name)
+    local scope_key = get_triggered_surface_event_scope_key(surface, ship)
+    if not (scope_key and event_name) then return false end
+    local surface_events = storage.triggered_surface_events and storage.triggered_surface_events[scope_key]
+    return surface_events and surface_events[event_name] or false
+end
+
+local function mark_surface_event_triggered(surface, ship, event_name)
+    local scope_key = get_triggered_surface_event_scope_key(surface, ship)
+    if not (scope_key and event_name) then return end
+    storage.triggered_surface_events = storage.triggered_surface_events or {}
+    storage.triggered_surface_events[scope_key] = storage.triggered_surface_events[scope_key] or {}
+    storage.triggered_surface_events[scope_key][event_name] = true
+end
+
+local function clear_triggered_surface_events_for_surface_index(surface_index)
+    if not (storage and storage.triggered_surface_events and surface_index) then return end
+    storage.triggered_surface_events["surface-index:" .. tostring(surface_index)] = nil
+end
+
+local function clear_triggered_surface_events_for_surface_name(surface_name)
+    if not (storage and storage.triggered_surface_events and surface_name) then return end
+    storage.triggered_surface_events["surface:" .. tostring(surface_name)] = nil
+end
+
+local function cleanup_triggered_surface_events()
+    if not (storage and storage.triggered_surface_events) then return end
+
+    for scope_key, events in pairs(storage.triggered_surface_events) do
+        local valid_scope = type(scope_key) == "string"
+        if valid_scope and string.sub(scope_key, 1, 8) == "surface:" then
+            local surface_name = string.sub(scope_key, 9)
+            local surface = game and game.surfaces and game.surfaces[surface_name]
+            valid_scope = surface and surface.valid
+        elseif valid_scope and string.sub(scope_key, 1, 14) == "surface-index:" then
+            local surface_index = tonumber(string.sub(scope_key, 15))
+            local surface = surface_index and game and game.surfaces and game.surfaces[surface_index]
+            valid_scope = surface and surface.valid
+        elseif valid_scope and string.sub(scope_key, 1, 7) == "planet:" then
+            valid_scope = true
+        end
+
+        if not valid_scope or not next(events or {}) then
+            storage.triggered_surface_events[scope_key] = nil
+        end
+    end
+end
+
+local function get_wdm_revisit_event_chance(ev)
+    if not ev then return 0 end
+
+    local chance = tonumber(ev.wdm_chance) or 0
+    local difficulty_add = tonumber(ev.wdm_difficulty_add) or 0
+--    local difficulty_setting = settings.global and settings.global["wdm-difficulty-level"]
+--    local difficulty_level = (difficulty_setting and tonumber(difficulty_setting.value)) or 0
+    chance = chance + difficulty_add
+--    chance = chance + (difficulty_add * difficulty_level)
+    if chance < 0 then return 0 end
+    if chance > 1 then return 1 end
+    return chance
+end
+
+local function should_trigger_surface_event(surface, ship, event_name, ev)
+    if not has_surface_event_been_triggered(surface, ship, event_name) then
+        return true
+    end
+
+    if is_surface_event_repeat_persistent(event_name) then
+        return true
+    end
+
+    local revisit_chance = get_wdm_revisit_event_chance(ev)
+    local rolled = math.random()
+    local success = rolled <= revisit_chance
+    debug("Revisit roll for custom planet event '" .. tostring(event_name) .. "' on surface "
+        .. tostring(surface and surface.name) .. ": rolled=" .. string.format("%.3f", rolled)
+        .. ", chance=" .. string.format("%.3f", revisit_chance)
+        .. ", success=" .. tostring(success))
+    return success
 end
 
 local CRYSTAL_LOW_BONUS = 0.075
@@ -1132,6 +1225,13 @@ local function handle_custom_planet_event(event_name, ship, surface)
         return
     end
 
+    cleanup_triggered_surface_events()
+
+    if not should_trigger_surface_event(surface, ship, event_name, ev) then
+        debug("Skipping custom planet event after revisit roll: " .. tostring(event_name) .. " on surface " .. tostring(surface and surface.name))
+        return
+    end
+
     debug("Handling custom planet event: " .. event_name .. " on surface " .. tostring(surface and surface.name))
 
     -- Создаем ship_stub для совместимости с ACTIONS
@@ -1179,6 +1279,7 @@ local function handle_custom_planet_event(event_name, ship, surface)
         }
 
         -- Запланировать первую волну с задержкой
+        mark_surface_event_triggered(surface, ship, event_name)
         schedule_event_for_tick(event_name, ship_stub, surface, delay_ticks, meta)
         return
     end
@@ -1187,7 +1288,10 @@ local function handle_custom_planet_event(event_name, ship, surface)
     local ok, err = pcall(action, surface, ev, ship_stub, meta)
     if not ok then
         debug("Error executing action for event '" .. event_name .. "': " .. tostring(err))
+        return
     end
+
+    mark_surface_event_triggered(surface, ship, event_name)
 end
 
 -- ACTION: Спавн лазерного босса (использует unified threat level)
@@ -2349,6 +2453,8 @@ local function on_ship_warping(event)
     debug("WDM event on_ship_warping fired; ship=" .. tostring(event and event.ship and event.ship.name) ..
           ", to_planet=" .. tostring(event and event.is_going_to_planet))
 
+    cleanup_triggered_surface_events()
+
     local old_melee_bonus = storage.enemy_melee_damage_bonus or 0
     local old_biological_bonus = storage.enemy_biological_damage_bonus or 0
     local new_melee_bonus = old_melee_bonus
@@ -2480,6 +2586,7 @@ end
 
 local function initialize_mod()
     init_event_storage()
+    cleanup_triggered_surface_events()
     rebuild_storm_destroy_registrations()
     sync_default_events()
     register_event_handlers()
@@ -2568,6 +2675,12 @@ local function initialize_mod()
     end
 end
 
+local function on_surface_deleted(event)
+    if not event then return end
+    clear_triggered_surface_events_for_surface_index(event.surface_index)
+    clear_triggered_surface_events_for_surface_name(event.surface_name)
+end
+
 -- Обработчик изменения настроек
 local function on_runtime_mod_setting_changed(event)
     if event.setting == "wdm-expansion-event-enable" then
@@ -2630,6 +2743,7 @@ return {
     on_entity_built = on_entity_built,
     on_entity_removed = on_entity_removed,
     on_object_destroyed = on_object_destroyed,
+    on_surface_deleted = on_surface_deleted,
     reset_crystal_mined_bonuses = reset_crystal_mined_bonuses,
     on_runtime_mod_setting_changed = on_runtime_mod_setting_changed,
     find_safe_teleport_position = function(surface, preferred_pos)

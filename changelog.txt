@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.21
+Date: 2026-04-10
+  Major Features:
+    - Changes to the event generation logic. In particular, events on the home planet now work differently.
+  Balancing:
+    - More pirates!
+    - Slightly reduced loot from the Pirates of Mechanics event.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.20
 Date: 2026-04-09
   Bugfixes:

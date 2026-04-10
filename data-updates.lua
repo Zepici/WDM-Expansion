@@ -31,13 +31,6 @@ if mods["Cold_biters"] then
     end
 end
 
-local loot = data.raw.unit["maf-boss-biter-1"].loot
-for k=1,10 do 
-	if data.raw["electric-turret"]["kj_electric_laser_"..k] then 
-	    data.raw["electric-turret"]["kj_electric_laser_"..k].loot = loot 
-	end
-end
-
 if mods["teleporting_machine"] then 
 --	table.insert(data.raw.recipe["emergency-return"].ingredients, {type = "item", name = "warponium-plate", amount = 10})
 	table.insert(data.raw.technology["emergency-return"].prerequisites, "teleporting_machine")
