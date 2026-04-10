@@ -108,6 +108,58 @@ local function get_quality_name(quality)
     return quality
 end
 
+local function get_entity_max_health(entity)
+    if not (entity and entity.valid and entity.prototype) then return nil end
+
+    local ok, max_health = pcall(function()
+        return entity.prototype.get_max_health(get_entity_quality(entity))
+    end)
+
+    if ok and type(max_health) == "number" and max_health > 0 then
+        return max_health
+    end
+
+    return nil
+end
+
+local function get_inventory_contents_snapshot(inventory)
+    if not (inventory and inventory.valid) then return nil end
+
+    local ok, contents = pcall(function()
+        return inventory.get_contents()
+    end)
+    if not ok or not contents then return nil end
+
+    local snapshot = {}
+    for _, entry in pairs(contents) do
+        if entry and entry.name and entry.count and entry.count > 0 then
+            snapshot[#snapshot + 1] = {
+                name = entry.name,
+                quality = entry.quality,
+                count = entry.count
+            }
+        end
+    end
+
+    return snapshot
+end
+
+local function restore_inventory_contents(inventory, snapshot, clear_inventory)
+    if not (inventory and inventory.valid and snapshot) then return end
+
+    if clear_inventory then
+        inventory.clear()
+    end
+
+    for _, entry in ipairs(snapshot) do
+        inventory.insert{
+            name = entry.name,
+            quality = entry.quality,
+            count = entry.count
+        }
+    end
+end
+
 local function create_entity_ghost(surface, position, direction, force, inner_name, quality, tags)
     return surface.create_entity{
         name = "entity-ghost",
@@ -197,6 +249,19 @@ local function swap_turret_entity(turret, target_name)
     if turret.name == target_name then return turret end
 
     local old_unit_number = turret.unit_number
+    local old_health = turret.health
+    local old_direction = turret.direction
+    local old_force = turret.force
+    local old_surface = turret.surface
+    local old_position = turret.position
+    local old_quality = get_entity_quality(turret)
+    local ammo_contents = nil
+
+    local old_ammo_inventory = turret.get_inventory(defines.inventory.turret_ammo)
+    if old_ammo_inventory and old_ammo_inventory.valid then
+        ammo_contents = get_inventory_contents_snapshot(old_ammo_inventory)
+    end
+
     if old_unit_number then
         remove_red_concrete_bonus_label(old_unit_number)
     end
@@ -214,20 +279,22 @@ local function swap_turret_entity(turret, target_name)
     }
 
     if created and created.valid then
+        if turret.valid and created ~= turret then
+            if old_health and created.health then
+                created.health = math.min(old_health, get_entity_max_health(created) or old_health)
+            end
+
+            if ammo_contents then
+                local new_ammo_inventory = created.get_inventory(defines.inventory.turret_ammo)
+                if new_ammo_inventory and new_ammo_inventory.valid then
+                    restore_inventory_contents(new_ammo_inventory, ammo_contents, true)
+                end
+            end
+
+            turret.destroy({raise_destroy = false})
+        end
+
         return created
-    end
-
-    local ammo_contents = nil
-    local old_health = turret.health
-    local old_direction = turret.direction
-    local old_force = turret.force
-    local old_surface = turret.surface
-    local old_position = turret.position
-    local old_quality = get_entity_quality(turret)
-
-    local old_ammo_inventory = turret.get_inventory(defines.inventory.turret_ammo)
-    if old_ammo_inventory and old_ammo_inventory.valid then
-        ammo_contents = old_ammo_inventory.get_contents()
     end
 
     turret.destroy({raise_destroy = false})
@@ -245,15 +312,13 @@ local function swap_turret_entity(turret, target_name)
 
     if created and created.valid then
         if old_health and created.health then
-            created.health = math.min(old_health, created.prototype.max_health or old_health)
+            created.health = math.min(old_health, get_entity_max_health(created) or old_health)
         end
 
         if ammo_contents then
             local new_ammo_inventory = created.get_inventory(defines.inventory.turret_ammo)
             if new_ammo_inventory and new_ammo_inventory.valid then
-                for item_name, count in pairs(ammo_contents) do
-                    new_ammo_inventory.insert({name = item_name, count = count})
-                end
+                restore_inventory_contents(new_ammo_inventory, ammo_contents, false)
             end
         end
     end

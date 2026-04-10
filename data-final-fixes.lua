@@ -40,6 +40,50 @@ local function deepcopy(orig)
     return table.deepcopy(orig)
 end
 
+local BUFFED_TURRET_PREFIX = "wdm-red-concrete-buffed-"
+
+local function add_turret_attack_effects(source_turret_name, target_turret_name)
+    if not source_turret_name or not target_turret_name or source_turret_name == target_turret_name then return end
+
+    for _, technology in pairs(data.raw.technology or {}) do
+        local effects = technology.effects
+        if effects then
+            local has_target_effect = false
+
+            for _, effect in pairs(effects) do
+                if effect.type == "turret-attack" and effect.turret_id then
+                    if effect.turret_id == target_turret_name then
+                        has_target_effect = true
+                    end
+                end
+            end
+
+            if not has_target_effect then
+                for _, effect in pairs(effects) do
+                    if effect.type == "turret-attack" and effect.turret_id == source_turret_name then
+                        local copied_effect = deepcopy(effect)
+                        copied_effect.turret_id = target_turret_name
+                        table.insert(effects, copied_effect)
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function add_buffed_turret_attack_effects()
+    for _, turret_type in ipairs({"ammo-turret", "electric-turret"}) do
+        for turret_name in pairs(data.raw[turret_type] or {}) do
+            if string.sub(turret_name, 1, #BUFFED_TURRET_PREFIX) == BUFFED_TURRET_PREFIX then
+                local base_name = string.sub(turret_name, #BUFFED_TURRET_PREFIX + 1)
+                if data.raw[turret_type][base_name] then
+                    add_turret_attack_effects(base_name, turret_name)
+                end
+            end
+        end
+    end
+end
+
 local function find_first_damage_amount(node)
     if type(node) ~= "table" then return nil end
 
@@ -145,6 +189,10 @@ if mods["space-age"]
         end
     end
 end
+
+add_turret_attack_effects("laser-turret", "kj_electric_laser_player")
+add_turret_attack_effects("laser-turret", "kj_electric_laser_mini")
+add_buffed_turret_attack_effects()
 -- Настройка спавнеров зомби
 if settings.startup["wdm-expansion-zombie"] and settings.startup["wdm-expansion-zombie"].value then
     local unit_spawner = data.raw["unit-spawner"]["biter-zombie-spawner"]

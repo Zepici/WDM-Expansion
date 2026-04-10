@@ -1,9 +1,16 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.20
+Date: 2026-04-09
+  Bugfixes:
+    - Buffed turret variants and player laser turrets now correctly inherit infinite technology turret bonuses.
+    - Fixed railgun operation on red refined concrete.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.19
 Date: 2026-04-09
   Bugfixes:
     - Crystals temporarily do not apply a bonus to enemies when destroyed.
     - Removed damage resistance from the player's laser cannon.
+    - Fixed loot chests.
   Ease of use:
     - Hidden extra turrets in factioriopedia.
 ---------------------------------------------------------------------------------------------------
