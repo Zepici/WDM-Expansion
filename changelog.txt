@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.22
+Date: 2026-04-10
+  Translation:
+    - Removed the French locale to ensure compatibility with the new translations from bev's "Patch FR des Mods" mod.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.21
 Date: 2026-04-10
   Major Features:

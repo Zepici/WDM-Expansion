@@ -125,6 +125,11 @@ mini_turret.energy_source = {
  mini_item.name = "kj_electric_laser_mini"
  mini_item.place_result = "kj_electric_laser_mini"
 
+ mini_item.hidden = true
+ mini_turret.hidden = true
+ mini_item.hidden_in_factoriopedia = false
+ mini_turret.hidden_in_factoriopedia = false
+
  mini_recipe.name = "kj_electric_laser_mini"
  if mini_recipe.results then
      for _, result in pairs(mini_recipe.results) do
