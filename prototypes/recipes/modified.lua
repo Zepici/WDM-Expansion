@@ -11,9 +11,9 @@ local recipes = {
     },
     ["pamk3-pdd"] = {
         ingredients = {
-            { type = "item", name = "discharge-defense-equipment", amount = 1 },
+            { type = "item", name = "discharge-defense-equipment", amount = 5 },
             { type = "item", name = "processing-unit",             amount = 20 },
-            { type = "item", name = "warponium-plate",             amount = 20 }
+            { type = "item", name = "warponium-plate",             amount = 50 }
         }
     },
     ["pamk3-esmk3"] = {

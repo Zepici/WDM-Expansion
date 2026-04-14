@@ -26,6 +26,13 @@ data:extend({
     setting_type = "runtime-global",
     default_value = true,
     order = "d"
+  },
+  {
+    type = "bool-setting",
+    name = "wdm-expansion-pirate-event-boost",
+    setting_type = "startup",
+    default_value = false,
+    order = "e"
   }
 })
 
@@ -36,7 +43,7 @@ if mods["ZombieHordeFaction"] then
       name = "wdm-expansion-zombie",
       setting_type = "startup",
       default_value = true,
-      order = "e"
+      order = "f"
     }
   })
 end

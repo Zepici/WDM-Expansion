@@ -111,6 +111,7 @@ local mini_recipe = deepcopy(data.raw["recipe"]["kj_electric_laser_player"])
 
 mini_turret.name = "kj_electric_laser_mini"
 mini_turret.max_health = 3000
+mini_turret.attack_parameters.damage_modifier = 0.3
 mini_turret.attack_parameters.ammo_type = deepcopy(data.raw["ammo"]["kj_laser_normal"].ammo_type)
 mini_turret.attack_parameters.ammo_type.energy_consumption = "0MJ"
 mini_turret.attack_parameters.range = 50

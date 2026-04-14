@@ -34,6 +34,11 @@ local tech = {
     },
     ["pamk3-nvmk2"] = {
         prerequisites = { "night-vision-equipment", "utility-science-pack" }
+    },
+    ["artillery-shell-range-1"] = {
+        effects = {
+            { type = "artillery-range", modifier = 0.1 }
+        },
     }
 }
 

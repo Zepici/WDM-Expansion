@@ -1,11 +1,34 @@
 local change_events = {}
 
-local DEFAULT_EVENT_OVERRIDES = {
-    pirates = {
-        chance = 0.17,
-        difficulty_add = 0.01
+local function get_pirates_chance()
+    local setting = settings.startup["wdm-expansion-pirate-event-boost"]
+
+    if setting and setting.value then
+        return 0.4
+    end
+
+    return 0.17
+end
+
+local function get_pirates_must_have()
+    local setting = settings.startup["wdm-expansion-pirate-event-boost"]
+
+    if setting and setting.value then
+        return 4
+    end
+
+    return 18
+end
+
+local function get_default_event_overrides()
+    return {
+        pirates = {
+            chance = get_pirates_chance(),
+            difficulty_add = 0.01,
+            must_have_on = get_pirates_must_have()
+        }
     }
-}
+end
 
 local function apply_override(event_name, property_name, value)
     if not (remote and remote.interfaces and remote.interfaces["WDM"]) then
@@ -20,7 +43,9 @@ local function apply_override(event_name, property_name, value)
 end
 
 function change_events.apply_default_event_overrides()
-    for event_name, properties in pairs(DEFAULT_EVENT_OVERRIDES) do
+    local default_event_overrides = get_default_event_overrides()
+
+    for event_name, properties in pairs(default_event_overrides) do
         for property_name, value in pairs(properties) do
             apply_override(event_name, property_name, value)
         end

@@ -195,6 +195,20 @@ local function apply_turret_delay(entity, delay_seconds)
     end)
 end
 
+local function ensure_turret_delay_artillery_support()
+    if not (remote and remote.interfaces and remote.interfaces["Turret_Delay"]) then return end
+
+    pcall(function()
+        remote.call("Turret_Delay", "add_turret_name", "artillery-turret")
+    end)
+end
+
+local function apply_artillery_turret_delay(entity)
+    if not (entity and entity.valid) then return end
+    if entity.name ~= "artillery-turret" then return end
+    apply_turret_delay(entity, 10)
+end
+
 local function table_size(t)
     if not t then return 0 end
     local cnt = 0
@@ -1154,7 +1168,7 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
 
         if ok and boss and boss.valid then
             if boss.energy ~= nil then boss.energy = boss.electric_buffer_size or 0 end
-            apply_turret_delay(boss, 10)
+            apply_turret_delay(boss, 15)
             pcall(function()
                 surface.create_entity{
                     name = "solar-panel-explosion",
@@ -2586,6 +2600,7 @@ end
 
 local function initialize_mod()
     init_event_storage()
+    ensure_turret_delay_artillery_support()
     cleanup_triggered_surface_events()
     rebuild_storm_destroy_registrations()
     sync_default_events()
@@ -2695,6 +2710,7 @@ end
 local function on_entity_built(event)
     local entity = event.entity or event.created_entity
 --    register_crystal_bonus_override(entity)
+    apply_artillery_turret_delay(entity)
     apply_storm_disable_to_built_entity(entity)
 end
 
@@ -2731,6 +2747,7 @@ local function on_object_destroyed(event)
 end
 
 local function on_load()
+    ensure_turret_delay_artillery_support()
     register_event_handlers()
     if storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
         ensure_crystal_tick()

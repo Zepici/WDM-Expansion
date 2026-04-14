@@ -19,7 +19,8 @@ return {
                 shift = {10, -10}
             }
         },
-        minable = {mining_time = 0.5, result = "linked-heat-pipe-1"}
+        minable = {mining_time = 0.5, result = "linked-heat-pipe-1"},
+        heating_radius = 0
     },
     {
         _base = data.raw["heat-pipe"]["heat-pipe"],
@@ -43,6 +44,7 @@ return {
             }
         },
         minable = {mining_time = 0.5, result = "linked-heat-pipe-2"},
+        heating_radius = 0,
         pictures = {
             single = {
                 layers = {
@@ -86,6 +88,7 @@ return {
             }
         },
         minable = {mining_time = 0.5, result = "linked-heat-pipe-3"},
+        heating_radius = 0,
         pictures = {
             single = {
                 layers = {
@@ -129,6 +132,7 @@ return {
             }
         },
         minable = {mining_time = 0.5, result = "linked-heat-pipe-4"},
+        heating_radius = 0,
         pictures = {
             single = {
                 layers = {

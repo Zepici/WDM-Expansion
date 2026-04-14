@@ -1,4 +1,42 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.1.28
+Date: 2026-04-14
+  Bugfixes:
+    - Fixed the mod not working without Space Age.
+  Balancing:
+    - Some pirate ships have been updated. Use /wdm-refresh-pirate-blueprints.
+    - Increased damage of the Pirate Mini Laser Cannon.
+    - Walls received 70% resistance to electrical damage.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.27
+Date: 2026-04-13
+  Balancing:
+    - Warp heat pipes no longer heat tiles around them.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.26
+Date: 2026-04-13
+  Bugfixes:
+    - Fixed the operation of pirate railguns.
+  Balancing:
+    - Changed the behavior of pirate artillery.
+    - Laser boss turrets now receive a 15 second delay upon spawning, up from 10 seconds.
+    - Artillery now has a 10 second activation delay when deployed.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.25
+Date: 2026-04-12
+  Features:
+    - Added a setting that allows you to significantly increase the number of pirates.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.24
+Date: 2026-04-12
+  Balancing:
+    - Some combat changes.
+---------------------------------------------------------------------------------------------------
+Version: 0.1.23
+Date: 2026-04-11
+  Translation:
+    - Fixed an error message that appeared when mechanical pirates appeared in the English and, temporarily, French localizations.  
+---------------------------------------------------------------------------------------------------
 Version: 0.1.22
 Date: 2026-04-10
   Translation:

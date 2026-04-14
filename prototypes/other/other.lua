@@ -97,7 +97,15 @@ data.raw["ammo-turret"]["kj_laser"].hidden = true
 data.raw["ammo-turret"]["kj_laser"].hidden_in_factoriopedia = true
 data.raw["electric-turret"]["kj_electric_laser"].hidden = true
 data.raw["electric-turret"]["kj_electric_laser"].hidden_in_factoriopedia = true
-
+data.raw["artillery-turret"]["artillery-turret"].manual_range_modifier = 1.3
+data.raw["active-defense-equipment"]["pamk3-pdd"].attack_parameters.range = 12
+if mods["space-age"] then
+    data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_per_shot = "0kJ"
+    data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_source.render_no_network_icon = false
+    data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_source.render_no_power_icon = false
+end
+table.insert(data.raw.wall["stone-wall"].resistances, {type = "electric", percent = 70})
+table.insert(data.raw.gate["gate"].resistances, {type = "electric", percent = 70})
 
 local function scale_sound_volume(sound, multiplier)
     if type(sound) ~= "table" then return end
