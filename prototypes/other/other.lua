@@ -135,7 +135,7 @@ if mods["space-age"] then
     if base_explosion and not data.raw["explosion"]["wdm-cyborg_electric_projectile_explosion_quiet"] then
         local quiet_explosion = table.deepcopy(base_explosion)
         quiet_explosion.name = "wdm-cyborg_electric_projectile_explosion_quiet"
-        scale_sound_volume(quiet_explosion.sound, 0.7)
+        scale_sound_volume(quiet_explosion.sound, 0.8)
         data:extend({ quiet_explosion })
     end
 end
