@@ -2,7 +2,7 @@ data:extend({
   {
     type = "bool-setting",
     name = "wdm-expansion-event-enable",
-    setting_type = "runtime-global",
+    setting_type = "startup",
     default_value = true,
     order = "a"
   },

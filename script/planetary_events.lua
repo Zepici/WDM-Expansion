@@ -37,6 +37,7 @@ local DEFAULT_EVENTS = {
         -- WDM planet event parameters
         wdm_chance = 0.08,
         wdm_min_wap = 40,
+        wdm_must_have_on = 25,
         wdm_min_tech_progress = 0.1,
         wdm_no_repeat = true,
         wdm_requires_enemies = true,
@@ -46,9 +47,8 @@ local DEFAULT_EVENTS = {
         -- Internal config
         action_name = "spawn_laser_boss_far",
         spawn_count = 1,
+        spawn_distance_modifier = 1,
         spawn_opts = {
-            min_dist = 70,
-            max_dist = 250,
             spacing = 100,
             elite_chance = HAS_SPACE_AGE and 0.2 or 0
         },
@@ -102,6 +102,7 @@ local DEFAULT_EVENTS = {
         wdm_chance = 0.06,
         wdm_min_wap = 30,
         wdm_min_tech_progress = 0,
+        wdm_must_have_on = 33,
         wdm_no_repeat = true,
         wdm_requires_enemies = true,
         wdm_can_be_removed = false,
@@ -112,8 +113,10 @@ local DEFAULT_EVENTS = {
         initial_count = 3,
         growth_count = 3,
         growth_interval_seconds = 120,
-        ship_exclusion_radius = 60,
-        enemy_bonus_per_crystal = 0.15 -- additive per mined crystal
+        big_crystal_chance = 0.072,
+        big_crystal_bonus = 0.75,
+        enemy_bonus_per_crystal = 0.15, -- additive per mined crystal
+        spawn_distance_modifier = 1
     },
     bright_day = {
         -- WDM planet event parameters
@@ -138,6 +141,7 @@ if has_active_mod("magnetic-storm") then
         wdm_chance = 0.08,
         wdm_min_wap = 20,
         wdm_min_tech_progress = 0.1,
+        wdm_must_have_on = 25,
         wdm_no_repeat = true,
         wdm_requires_enemies = false,
         wdm_can_be_removed = false,
@@ -806,7 +810,7 @@ local function make_crystal_bonus_key(entity)
 end
 
 local function get_crystal_bonus_override_value(entity)
-    if not (entity and entity.valid and entity.name == "crystal" and entity.surface and entity.surface.valid) then return end
+    if not (entity and entity.valid and (entity.name == "entity-crystal" or entity.name == "big-crystal") and entity.surface and entity.surface.valid) then return end
     local ok, tile = pcall(function() return entity.surface.get_tile(entity.position) end)
     if not (ok and tile and tile.valid and tile.name and SPECIAL_CRYSTAL_BONUS_TILES[tile.name]) then return nil end
     return CRYSTAL_LOW_BONUS
@@ -823,7 +827,7 @@ local function clear_crystal_destroy_registration_by_key(key)
 end
 
 local function register_crystal_bonus_override(entity)
-    if not (entity and entity.valid and entity.name == "crystal" and entity.surface and entity.surface.valid) then return end
+    if not (entity and entity.valid and (entity.name == "entity-crystal" or entity.name == "big-crystal") and entity.surface and entity.surface.valid) then return end
     storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
     storage.crystal_destroy_registrations = storage.crystal_destroy_registrations or {
         by_registration = {},
@@ -943,7 +947,7 @@ local function register_wdm_planet_events()
                     event_config.wdm_difficulty_add or 0.0,    -- difficulty_add
                     event_config.wdm_no_repeat or false,       -- no_repeat
                     event_config.wdm_requires_enemies or false, -- requires_enemies
-                    nil,                           -- must_have_on (nil = no requirement)
+                    event_config.wdm_must_have_on or nil,       -- must_have_on
                     event_config.wdm_alarm or false -- alarm
                 )
                 debug("Registered WDM planet event: " .. event_name)
@@ -1010,6 +1014,32 @@ local function get_threat_level(surface, force, opts)
     threat = math.max(0, math.min(1, threat))
 
     return { evo = evo, tech = tech, threat = threat }
+end
+
+-- Возвращает уровень технологии размера палубы (0..8) для силы
+local function get_ship_floor_size_tech_level(force)
+    if not (force and force.valid and force.technologies) then return 0 end
+    for lvl = 8, 1, -1 do
+        local tech_name = "wdm_ship_floor_1_size_tech-" .. tostring(lvl)
+        local tech = force.technologies[tech_name]
+        if tech and tech.researched then
+            return lvl
+        end
+    end
+    return 0
+end
+
+-- Вычисляет min/max дистанции спавна по уровню технологии и опциональному модификатору
+local function compute_spawn_distance_range_by_tech(force, opts)
+    opts = opts or {}
+    local base_by_level = {80, 92, 102, 111, 119, 126, 132, 137, 141}
+    local lvl = get_ship_floor_size_tech_level(force) or 0
+    local base_min = base_by_level[lvl + 1] or 80
+    local modifier = tonumber(opts.spawn_distance_modifier) or tonumber(opts.distance_modifier) or 1
+    if modifier <= 0 then modifier = 1 end
+    local min_dist = math.floor(base_min * modifier)
+    local max_dist = math.floor(min_dist * 3)
+    return min_dist, max_dist
 end
 
 -- ============================================================
@@ -1128,6 +1158,15 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
     count = (count and count > 0) and count or 1
     opts = opts or {}
 
+    -- determine force for tech lookups (derive from ship)
+    local force = nil
+    if ship and ship.force and type(ship.force) == "table" then
+        force = ship.force
+    elseif ship and ship.force and type(ship.force) == "string" then
+        force = game.forces[ship.force]
+    end
+    if not (force and force.valid) then force = game.forces["player"] end
+
     local base_pos = (ship and ship.position) or { x = 0, y = 0 }
 
     for i = 1, count do
@@ -1138,9 +1177,14 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
             spawn_prototype = elite_prototype
         end
 
-        local min_dist = opts.min_dist or 100
-        local max_dist = opts.max_dist or 200
         local radial_offset = (i - 1) * (opts.spacing or 60)
+        local min_dist, max_dist
+        if opts.min_dist or opts.max_dist then
+            min_dist = opts.min_dist or 100
+            max_dist = opts.max_dist or (min_dist * 2)
+        else
+            min_dist, max_dist = compute_spawn_distance_range_by_tech(force, opts)
+        end
         local pos = find_spawn_position_near_ship(ship, surface, min_dist + radial_offset, max_dist + radial_offset, spawn_prototype)
         if not pos then
             debug("Failed to find non-water spawn position for prototype=" .. tostring(spawn_prototype))
@@ -1312,6 +1356,10 @@ end
 ACTIONS.spawn_laser_boss_far = function(surface, ev, ship_stub, meta)
     local base_count = ev.spawn_count or ev.count or 1
     local opts = ev.spawn_opts or {}
+    -- allow DEFAULT_EVENTS to carry a spawn distance modifier at top-level
+    if not opts.spawn_distance_modifier then
+        opts.spawn_distance_modifier = ev.spawn_distance_modifier or ev.spawn_distance_multiplier or opts.spawn_distance_modifier
+    end
 
     -- force for tech lookups
     local force = nil
@@ -1795,19 +1843,24 @@ ACTIONS.crystal_overgrowth = function(surface, ev, ship_stub, meta)
     if not (surface and surface.valid) then return end
     local cfg = ev or DEFAULT_EVENTS.crystal_overgrowth
     local center = ship_stub and ship_stub.position or nil
-    storage.crystal_overgrowth_blocked_zones = storage.crystal_overgrowth_blocked_zones or {}
-    local blocked_zone = nil
-    if center then
-        blocked_zone = {
-            position = { x = center.x, y = center.y },
-            radius = cfg.ship_exclusion_radius or DEFAULT_EVENTS.crystal_overgrowth.ship_exclusion_radius 
-        }
+    -- determine force for tech lookups (derive from ship)
+    local force = nil
+    if ship_stub and ship_stub.force and type(ship_stub.force) == "table" then
+        force = ship_stub.force
+    elseif ship_stub and ship_stub.force and type(ship_stub.force) == "string" then
+        force = game.forces[ship_stub.force]
     end
-    storage.crystal_overgrowth_blocked_zones[surface.index] = blocked_zone
+    if not (force and force.valid) then force = game.forces["player"] end
+
+    -- crystal_overgrowth: use tech-based distances; default modifier = 1
+    local spawn_opts = {
+        force = force,
+        spawn_distance_modifier = ev.spawn_distance_modifier or (ev.spawn_opts and ev.spawn_opts.spawn_distance_modifier) or 1
+    }
     game.print({ "wdm-expansion.crystal_overgrowth_started", surface.name })
-    spawn_crystals(surface, cfg.initial_count or 8, center, blocked_zone, true)
+    spawn_crystals(surface, cfg.initial_count or 8, center, nil, true, spawn_opts)
     storage.crystal_overgrowth_active = storage.crystal_overgrowth_active or {}
-    storage.crystal_overgrowth_active[surface.index] = true
+    storage.crystal_overgrowth_active[surface.index] = force and force.name or "player"
     -- configure tick interval (seconds -> ticks)
     storage.crystal_growth_interval = ((cfg.growth_interval_seconds or 60) * 60)
     ensure_crystal_tick()
@@ -1846,51 +1899,68 @@ end
 -- ============================================================
 
 -- ACTION: Crystal overgrowth - spawns crystals and enables periodic growth
-spawn_crystals = function(surface, count, center_pos, blocked_zone, announce_in_chat)
+spawn_crystals = function(surface, count, center_pos, blocked_zone, announce_in_chat, opts)
     if not (surface and surface.valid) then return end
     count = count or 4
+    opts = opts or {}
+    local force = nil
+    if opts.force then
+        if type(opts.force) == "string" then
+            force = (game.forces and game.forces[opts.force])
+        elseif type(opts.force) == "table" and opts.force.valid then
+            force = opts.force
+        end
+    end
+    if not (force and force.valid) then
+        force = game.forces and game.forces["player"]
+    end
 
     local function is_inside_blocked_zone(pos)
         if not (blocked_zone and blocked_zone.position and blocked_zone.radius and pos) then return false end
         return distance(pos, blocked_zone.position) < blocked_zone.radius
     end
 
+    local ev_cfg = (storage and storage.events and storage.events.crystal_overgrowth) or DEFAULT_EVENTS.crystal_overgrowth
+    local big_chance = (opts and opts.big_chance) or (ev_cfg and ev_cfg.big_crystal_chance) or 0
+
     for i = 1, count do
         local pos
-        if center_pos then
-            if blocked_zone and blocked_zone.position and blocked_zone.radius then
-                local angle = math.random() * math.pi * 2
-                local min_dist = blocked_zone.radius + 6
-                local max_dist = min_dist + 48
-                local dist = min_dist + (math.random() * (max_dist - min_dist))
-                pos = {
-                    x = center_pos.x + math.cos(angle) * dist,
-                    y = center_pos.y + math.sin(angle) * dist
-                }
-            else
-                pos = { x = center_pos.x + math.random(-30, 30), y = center_pos.y + math.random(-30, 30) }
-            end
+        -- use tech-based distances for crystals; center_pos means spawn around ship center
+        local min_d, max_d
+        if opts.min_dist or opts.max_dist then
+            min_d = opts.min_dist or 50
+            max_d = opts.max_dist or (min_d + 200)
         else
-            pos = { x = math.random(-250, 250), y = math.random(-250, 250) }
+            min_d, max_d = compute_spawn_distance_range_by_tech(force, opts)
+        end
+        local angle = math.random() * math.pi * 2
+        local dist = min_d + (math.random() * (max_d - min_d))
+        if center_pos then
+            pos = { x = center_pos.x + math.cos(angle) * dist, y = center_pos.y + math.sin(angle) * dist }
+        else
+            pos = { x = math.cos(angle) * dist, y = math.sin(angle) * dist }
         end
 
         if not is_inside_blocked_zone(pos) and surface.find_non_colliding_position then
-            local safe = surface.find_non_colliding_position("crystal", pos, 16, 0.5, false)
+            local spawn_name = "entity-crystal"
+            if big_chance > 0 and math.random() < big_chance and prototypes and prototypes.entity and prototypes.entity["big-crystal"] then
+                spawn_name = "big-crystal"
+            end
+            local safe = surface.find_non_colliding_position(spawn_name, pos, 16, 0.5, false)
             if safe and not is_inside_blocked_zone(safe) then
                 pos = safe
             else
                 pos = nil
             end
-        end
-
-        if pos and not is_inside_blocked_zone(pos) then
-            local ok, crystal = pcall(function()
-                return surface.create_entity{ name = "crystal", position = pos, force = game.forces.neutral }
-            end)
-            if ok and crystal and crystal.valid then
-                register_crystal_bonus_override(crystal)
-                if announce_in_chat then
-                    game.print({ "wdm-expansion.crystal_initial_ping", crystal.gps_tag })
+            if pos and not is_inside_blocked_zone(pos) then
+                local ok, crystal = pcall(function()
+                    return surface.create_entity{ name = spawn_name, position = pos, force = game.forces.neutral }
+                end)
+                if ok and crystal and crystal.valid then
+                    register_crystal_bonus_override(crystal)
+                    if announce_in_chat then
+                        game.print({ "wdm-expansion.crystal_initial_ping", crystal.gps_tag })
+                    end
                 end
             end
         end
@@ -1904,11 +1974,18 @@ local function crystal_growth_tick(event)
     end
     local ev = storage.events and storage.events.crystal_overgrowth or DEFAULT_EVENTS.crystal_overgrowth
     local growth = (ev and ev.growth_count) or 2
-    for surface_index, _ in pairs(storage.crystal_overgrowth_active) do
+    for surface_index, force_name in pairs(storage.crystal_overgrowth_active) do
         local surface = game.surfaces[surface_index]
         if surface and surface.valid then
             local blocked_zone = storage.crystal_overgrowth_blocked_zones and storage.crystal_overgrowth_blocked_zones[surface_index]
-            spawn_crystals(surface, growth, nil, blocked_zone)
+            local force = nil
+            if type(force_name) == "string" then force = game.forces and game.forces[force_name] end
+            if not (force and force.valid) then force = game.forces and game.forces["player"] end
+            local spawn_opts = {
+                spawn_distance_modifier = (ev and (ev.spawn_distance_modifier or (ev.spawn_opts and ev.spawn_opts.spawn_distance_modifier))) or 1,
+                force = force
+            }
+            spawn_crystals(surface, growth, nil, nil, nil, spawn_opts)
         else
             storage.crystal_overgrowth_active[surface_index] = nil
             if storage.crystal_overgrowth_blocked_zones then
@@ -1959,10 +2036,18 @@ end
 local function on_crystal_mined(event)
     local entity = event.entity
     if not (entity and entity.valid) then return end
-    if entity.name ~= "crystal" then return end
+    if not (entity.name == "entity-crystal" or entity.name == "big-crystal") then return end
 
     local destroy_record = consume_crystal_destroy_registration_for_entity(entity)
     local bonus_override = destroy_record and destroy_record.bonus_override or take_crystal_bonus_override(entity)
+
+    if entity.name == "big-crystal" then
+        local ev = storage.events and storage.events.crystal_overgrowth or DEFAULT_EVENTS.crystal_overgrowth
+        if type(bonus_override) ~= "number" and ev and type(ev.big_crystal_bonus) == "number" then
+            bonus_override = ev.big_crystal_bonus
+        end
+    end
+
     apply_crystal_mined_bonus(bonus_override)
 end
 
@@ -2692,8 +2777,23 @@ end
 
 local function on_surface_deleted(event)
     if not event then return end
-    clear_triggered_surface_events_for_surface_index(event.surface_index)
-    clear_triggered_surface_events_for_surface_name(event.surface_name)
+    storage.triggered_surface_events = storage.triggered_surface_events or {}
+
+    local si_key = event.surface_index and ("surface-index:" .. tostring(event.surface_index)) or nil
+    local s_name_key = event.surface_name and ("surface:" .. tostring(event.surface_name)) or nil
+
+    if si_key then
+        local evs = storage.triggered_surface_events[si_key]
+        if not evs or not next(evs) then
+            storage.triggered_surface_events[si_key] = nil
+        end
+    end
+    if s_name_key then
+        local evs = storage.triggered_surface_events[s_name_key]
+        if not evs or not next(evs) then
+            storage.triggered_surface_events[s_name_key] = nil
+        end
+    end
 end
 
 -- Обработчик изменения настроек
@@ -2752,6 +2852,32 @@ local function on_load()
     if storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
         ensure_crystal_tick()
     end
+end
+
+-- Debug console commands
+if commands and commands.add_command then
+    commands.add_command("wdm-print-ship-force", "Print current ship.force (player vehicle) or player's force.", function(cmd)
+        local prefix = "[WDM] ship.force: "
+        if cmd and cmd.player_index then
+            local player = game.players[cmd.player_index]
+            if player and player.valid then
+                local ship = player.vehicle
+                local force_name = nil
+                if ship and ship.valid and ship.force and ship.force.name then
+                    force_name = ship.force.name
+                elseif player.force and player.force.name then
+                    force_name = player.force.name
+                end
+                player.print(prefix .. tostring(force_name))
+                return
+            end
+            -- fallback to log
+            log(prefix .. "no valid player")
+            return
+        end
+        -- server/console
+        log(prefix .. "no player context")
+    end)
 end
 
 return {

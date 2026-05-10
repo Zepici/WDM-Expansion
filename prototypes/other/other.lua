@@ -99,6 +99,7 @@ data.raw["electric-turret"]["kj_electric_laser"].hidden = true
 data.raw["electric-turret"]["kj_electric_laser"].hidden_in_factoriopedia = true
 data.raw["artillery-turret"]["artillery-turret"].manual_range_modifier = 1.3
 data.raw["active-defense-equipment"]["pamk3-pdd"].attack_parameters.range = 12
+data.raw["recipe"]["warponium-fluid"].energy_required = 50
 if mods["space-age"] then
     data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_per_shot = "0kJ"
     data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_source.render_no_network_icon = false

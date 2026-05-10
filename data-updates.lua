@@ -110,6 +110,8 @@ if mods["teleporting_machine"] then
 	table.insert(data.raw.technology["emergency-return"].prerequisites, "teleporting_machine")
 end
 
+table.insert(data.raw.technology["wdm_warponium_processing"].effects, { type = "unlock-recipe", recipe = "conversion-plant" })
+
 local function scale_radius_fields(prototype, scale)
     if type(prototype) ~= "table" then return end
 

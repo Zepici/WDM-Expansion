@@ -77,5 +77,15 @@ if mods["Cold_biters"] and not mods["Explosive_biters"] then
         }   
     }
 end
-
+if settings.startup["wdm-expansion-event-enable"].value then
+    recipes["wdm_pirate_ship_search_probe"] = {
+        ingredients = {
+            { type = "item", name = "warponium-plate", amount = 1000 },
+            { type = "item", name = "processing-unit",       amount = 300 },
+            { type = "item", name = "satellite",       amount = 20 },
+            { type = "item", name = "radar",       amount = 100 },
+            { type = "item", name = "charged-crystal",       amount = 1 }                   
+        }   
+    }   
+end
 return recipes

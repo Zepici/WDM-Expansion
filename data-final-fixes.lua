@@ -7,6 +7,141 @@ if wdm_difficulty_setting then
     wdm_difficulty_setting.default_value = 2
 end
 
+for _, recipe_name in pairs({
+    "warponium-plate",
+    "warponium-fluid",
+    "crystal-processing",
+    "crystal-processing-t2"
+}) do
+    local recipe = data.raw["recipe"] and data.raw["recipe"][recipe_name]
+    if recipe then
+        recipe.category = "warponium"
+    end
+end
+
+local exclude_names = {
+    ["wdm_pirate_ship_search_probe"] = true
+}
+
+local function should_patch_factoriopedia_simulation(prototype_name)
+    if type(prototype_name) ~= "string" then return false end
+    
+    if exclude_names[prototype_name] then
+        return false
+    end
+    
+    return string.sub(prototype_name, 1, #"wdm_pirate") == "wdm_pirate"
+        or string.sub(prototype_name, 1, #"cyborg_strafer") == "cyborg_strafer"
+        or string.sub(prototype_name, 1, #"maf-boss") == "maf-boss"
+        or (mods["ZombieHordeFaction"]
+            and string.find(prototype_name, "zombie", 1, true))
+        or (mods["ArmouredBiters"]
+            and string.find(prototype_name, "armoured-biter", 1, true))
+        or (mods["Arachnids_enemy"] and (
+                string.find(prototype_name, "arachnid-biter", 1, true)
+                or string.find(prototype_name, "arachnid-spitter", 1, true)
+            ))
+        or (mods["Cold_biters"] and (
+                string.find(prototype_name, "cold-biter", 1, true)
+                or string.find(prototype_name, "cold-spitter", 1, true)
+            ))
+        or (mods["Toxic_biters"] and (
+                string.find(prototype_name, "toxic-biter", 1, true)
+                or string.find(prototype_name, "toxic-spitter", 1, true)
+            ))
+        or (mods["Explosive_biters"] and (
+                string.find(prototype_name, "explosive-biter", 1, true)
+                or string.find(prototype_name, "explosive-spitter", 1, true)
+            ))
+end
+
+local function is_boss(prototype_name)
+    return type(prototype_name) == "string"
+        and (
+            string.find(prototype_name, "wdm_pirate_boss", 1, true)
+            or string.find(prototype_name, "cyborg_strafer-boss", 1, true)
+            or string.find(prototype_name, "maf-boss", 1, true)
+        )
+end
+
+-- достаём цифру (1–10) из имени
+local function get_boss_level(prototype_name)
+    if type(prototype_name) ~= "string" then return nil end
+
+    local num = string.match(prototype_name, "%d+")
+    num = tonumber(num)
+
+    if num and num >= 1 and num <= 10 then
+        return num
+    end
+
+    return nil
+end
+
+local function patch_simulation_init(init_code, prototype_name)
+    if type(init_code) ~= "string" or init_code == "" then return init_code end
+
+    local patched_lines = {}
+    local boss = is_boss(prototype_name)
+
+    local zoom_value = nil
+
+    if boss then
+        local level = get_boss_level(prototype_name)
+        if level then
+            zoom_value = 1 - (level * 0.015)
+        else
+            zoom_value = 1
+        end
+    end
+
+    for line, newline in init_code:gmatch("([^\r\n]*)(\r?\n?)") do
+        if line == "" and newline == "" then break end
+
+        -- Патч entity name
+        if string.find(line, "create_entity", 1, true) then
+            line = line:gsub('name%s*=%s*"[^"]+"', 'name = "' .. prototype_name .. '"', 1)
+        end
+
+        -- Патч zoom
+        if boss and zoom_value then
+            if string.find(line, "zoom", 1, true) then
+                line = line:gsub('zoom%s*=%s*[%d%.]+', 'zoom = ' .. zoom_value, 1)
+            end
+        end
+
+        patched_lines[#patched_lines + 1] = line .. newline
+    end
+
+    return table.concat(patched_lines)
+end
+
+local function get_fallback_simulation()
+    local base = data.raw.unit and data.raw.unit["small-biter"]
+    if base and base.factoriopedia_simulation then
+        return table.deepcopy(base.factoriopedia_simulation)
+    end
+    return nil
+end
+
+for _, prototypes in pairs(data.raw or {}) do
+    for prototype_name, prototype in pairs(prototypes or {}) do
+
+        if should_patch_factoriopedia_simulation(prototype_name) then
+            local simulation = prototype.factoriopedia_simulation
+            if not simulation then
+                simulation = get_fallback_simulation()
+                prototype.factoriopedia_simulation = simulation
+            end
+
+            if simulation and simulation.init and not simulation.init_file then
+                simulation.init = patch_simulation_init(simulation.init, prototype_name)
+            end
+
+        end
+    end
+end
+
 local red_refined_concrete = data.raw.item and data.raw.item["red-refined-concrete"]
 if red_refined_concrete then
     red_refined_concrete.custom_tooltip_fields = red_refined_concrete.custom_tooltip_fields or {}

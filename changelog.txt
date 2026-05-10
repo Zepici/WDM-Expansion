@@ -1,4 +1,22 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.2.0
+Date: 2029-04-16
+  Major Features:
+    - Multiple reworks and additions to the mechanics of warponium mining, use and processing.
+    - In particular, added: warponium solar panel, conversion plant.
+    - Events have received a new formula for calculating the distance from a ship, taking into account its size.
+  Features:
+    - Added new variations of Exocine Crystals.
+    - Added and fixed factioriopedia simulations for all pirates, bosses and biters.
+    - Added dynamic passive energy drain system for ship terminals based on warp drive technology level (8 drain levels), consuming power proportional to progression.
+  Changes:
+    - The event-enable setting is now a startup setting, not a map.
+    - More technologies are integrated into the overall technology tree.
+  Balancing:
+    - Added guaranteed spawn values ​​for some events.
+  Compatibility:
+    - Supposedly improved compatibility with Team Competition and other mods that interact with force and allow the creation of multiple teams.
+---------------------------------------------------------------------------------------------------
 Version: 0.1.30
 Date: 2026-04-16
   Balancing:

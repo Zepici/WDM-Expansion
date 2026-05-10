@@ -28,5 +28,20 @@ utils.add_data(require("prototypes.items.crystal"))
 utils.add_data(require("prototypes.recipes.crystal"))
 utils.add_data(require("prototypes.technologies.crystal"))
 
+-- Категории
+utils.add_data(require("prototypes.recipe-category.warponium"))
+
 -- Звуки
 utils.add_data(require("prototypes.other.sounds"))
+
+-- Панелька
+utils.add_data(require("prototypes.entity.warponium-solar-panel"))
+utils.add_data(require("prototypes.items.warponium-solar-panel"))
+utils.add_data(require("prototypes.recipes.warponium-solar-panel"))
+utils.add_data(require("prototypes.technologies.warponium-solar-panel"))
+
+-- Завод по переработке варпония
+utils.add_data(require("prototypes.items.conversion-plant"))
+utils.add_data(require("prototypes.recipes.conversion-plant"))
+utils.add_data(require("prototypes.entity.conversion-plant"))
+utils.add_data(require("prototypes.entity.terminal-drain"))

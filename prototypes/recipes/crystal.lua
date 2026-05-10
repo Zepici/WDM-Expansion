@@ -2,16 +2,16 @@ return {
     {
         type = "recipe",
         name = "crystal-processing",
-        order = "w[warponiuym]",
+        order = "w[warponium]",
         subgroup = "intermediate-product",
         icons = {
             {
                 icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/crystal.png",
-                icon_size = 32,
+                icon_size = 64,
                 tint = {r=1, g=0.2, b=0.6, a=1}
             }
         },
-        category = "chemistry",
+        category = "warponium",
         ingredients = {
             {type = "item", name = "crystal", amount = 1},
             {type = "fluid", name = "sulfuric-acid", amount = 500}
@@ -33,16 +33,16 @@ return {
     {
         type = "recipe",
         name = "crystal-processing-t2",
-        order = "w[warponiuym]",
+        order = "w[warponium]",
         subgroup = "intermediate-product",
         icons = {
             {
                 icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/crystal.png",
-                icon_size = 32,
+                icon_size = 64,
                 tint = {r=1, g=0.2, b=0.6, a=1}
             }
         },
-        category = "chemistry",
+        category = "warponium",
         ingredients = {
             {type = "item", name = "crystal", amount = 1},
             {type = "fluid", name = "sulfuric-acid", amount = 500}

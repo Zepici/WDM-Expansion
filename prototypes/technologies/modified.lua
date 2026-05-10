@@ -39,6 +39,12 @@ local tech = {
         effects = {
             { type = "artillery-range", modifier = 0.1 }
         },
+    },
+    ["wdm_warponium_processing"] = {
+        prerequisites = { "engine", "wdm_warp_drive_tech-1" }
+    },
+    ["wdm_spaceship_solarium-3"] = {
+        prerequisites = { "utility-science-pack", "wdm_spaceship_solarium-2", "solar-matrix" }
     }
 }
 
