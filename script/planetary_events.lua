@@ -135,7 +135,6 @@ local DEFAULT_EVENTS = {
         min_distance = 96,
         max_distance = 4096,
         attempts_per_chunk = 3,
-        chunk_spawn_window = 40,
         ruins_pool = {
             "crash-site-spaceship-wreck-small-1",
             "crash-site-spaceship-wreck-small-2",
@@ -1914,10 +1913,7 @@ ACTIONS.ruins = function(surface, ev, ship_stub, meta)
     local attempts = math.max(1, tonumber(cfg.attempts_per_chunk) or 3)
 
     storage.ruins_active_surfaces = storage.ruins_active_surfaces or {}
-    storage.ruins_active_surfaces[surface.index] = {
-        remaining_chunks = math.max(1, tonumber(cfg.chunk_spawn_window) or 40),
-        activated_tick = game.tick
-    }
+    storage.ruins_active_surfaces[surface.index] = true
 
     for _ = 1, attempts do
         local angle = math.random() * (math.pi * 2)
@@ -2905,13 +2901,8 @@ local function try_spawn_ruin_on_chunk(event)
     if not is_ruins_surface(surface) then return end
 
     local ruins_state = storage and storage.ruins_active_surfaces and storage.ruins_active_surfaces[surface.index]
-    if not ruins_state or (tonumber(ruins_state.remaining_chunks) or 0) <= 0 then
+    if not ruins_state then
         return
-    end
-
-    ruins_state.remaining_chunks = (tonumber(ruins_state.remaining_chunks) or 0) - 1
-    if ruins_state.remaining_chunks <= 0 then
-        storage.ruins_active_surfaces[surface.index] = nil
     end
 
     local ruins_cfg = (storage and storage.events and storage.events.ruins) or DEFAULT_EVENTS.ruins
