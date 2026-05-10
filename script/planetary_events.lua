@@ -135,6 +135,7 @@ local DEFAULT_EVENTS = {
         min_distance = 96,
         max_distance = 4096,
         attempts_per_chunk = 3,
+        chunk_spawn_window = 40,
         ruins_pool = {
             "crash-site-spaceship-wreck-small-1",
             "crash-site-spaceship-wreck-small-2",
@@ -706,6 +707,7 @@ local function init_event_storage()
     storage.events = storage.events or {}
     storage.scheduled_events = storage.scheduled_events or {}
     storage.triggered_surface_events = storage.triggered_surface_events or {}
+    storage.ruins_active_surfaces = storage.ruins_active_surfaces or {}
     storage.active_earthquakes = storage.active_earthquakes or {}
     storage.lost_decks = storage.lost_decks or {}
     storage.active_magnetic_storms = storage.active_magnetic_storms or {}
@@ -1911,6 +1913,12 @@ ACTIONS.ruins = function(surface, ev, ship_stub, meta)
     local radius = tonumber(cfg.custom_spawn_radius) or 96
     local attempts = math.max(1, tonumber(cfg.attempts_per_chunk) or 3)
 
+    storage.ruins_active_surfaces = storage.ruins_active_surfaces or {}
+    storage.ruins_active_surfaces[surface.index] = {
+        remaining_chunks = math.max(1, tonumber(cfg.chunk_spawn_window) or 40),
+        activated_tick = game.tick
+    }
+
     for _ = 1, attempts do
         local angle = math.random() * (math.pi * 2)
         local distance = math.random(24, math.floor(radius))
@@ -2866,6 +2874,10 @@ local function on_surface_deleted(event)
             storage.triggered_surface_events[s_name_key] = nil
         end
     end
+
+    if event.surface_index and storage.ruins_active_surfaces then
+        storage.ruins_active_surfaces[event.surface_index] = nil
+    end
 end
 
 -- Обработчик изменения настроек
@@ -2891,6 +2903,16 @@ local function try_spawn_ruin_on_chunk(event)
 
     local surface = event.surface
     if not is_ruins_surface(surface) then return end
+
+    local ruins_state = storage and storage.ruins_active_surfaces and storage.ruins_active_surfaces[surface.index]
+    if not ruins_state or (tonumber(ruins_state.remaining_chunks) or 0) <= 0 then
+        return
+    end
+
+    ruins_state.remaining_chunks = (tonumber(ruins_state.remaining_chunks) or 0) - 1
+    if ruins_state.remaining_chunks <= 0 then
+        storage.ruins_active_surfaces[surface.index] = nil
+    end
 
     local ruins_cfg = (storage and storage.events and storage.events.ruins) or DEFAULT_EVENTS.ruins
     if not ruins_cfg then return end
