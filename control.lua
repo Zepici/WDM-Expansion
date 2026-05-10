@@ -84,6 +84,10 @@ local function register_shared_event_handlers()
     elseif defines.events.on_surface_deleted then
         script.on_event(defines.events.on_surface_deleted, on_surface_deleted)
     end
+
+    script.on_event(defines.events.on_chunk_generated, function(event)
+        safe_call(planetary_events.on_chunk_generated, event)
+    end)
 end
 
 local function register_wdm_blueprint_overrides()

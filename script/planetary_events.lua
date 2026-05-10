@@ -6,6 +6,7 @@ local function has_active_mod(mod_name)
 end
 local HAS_SPACE_AGE = has_active_mod("space-age")
 
+
 -- ============================================================
 -- КОНСТАНТЫ И КОНФИГУРАЦИЯ
 -- ============================================================
@@ -117,6 +118,36 @@ local DEFAULT_EVENTS = {
         big_crystal_bonus = 0.75,
         enemy_bonus_per_crystal = 0.15, -- additive per mined crystal
         spawn_distance_modifier = 1
+    },
+    ruins = {
+        -- WDM planet event parameters
+        wdm_chance = 0.03,
+        wdm_min_wap = 0,
+        wdm_min_tech_progress = 0,
+        wdm_no_repeat = false,
+        wdm_requires_enemies = false,
+        wdm_can_be_removed = false,
+        wdm_difficulty_add = 0.0,
+        wdm_alarm = false,
+        -- Internal config (on_chunk_generated)
+        action_name = "ruins",
+        chance_per_chunk = 0.015,
+        min_distance = 96,
+        max_distance = 4096,
+        attempts_per_chunk = 3,
+        ruins_pool = {
+            "crash-site-spaceship-wreck-small-1",
+            "crash-site-spaceship-wreck-small-2",
+            "crash-site-spaceship-wreck-small-3",
+            "crash-site-spaceship-wreck-small-4",
+            "crash-site-spaceship-wreck-small-5",
+            "crash-site-spaceship-wreck-small-6",
+            "crash-site-spaceship-wreck-medium-1",
+            "crash-site-spaceship-wreck-medium-2",
+            "crash-site-spaceship-wreck-medium-3",
+            "crash-site-spaceship-wreck-big-1",
+            "crash-site-spaceship-wreck-big-2"
+        }
     },
     bright_day = {
         -- WDM planet event parameters
@@ -1867,6 +1898,47 @@ ACTIONS.crystal_overgrowth = function(surface, ev, ship_stub, meta)
     debug("crystal_overgrowth started on surface " .. tostring(surface.index))
 end
 
+
+ACTIONS.ruins = function(surface, ev, ship_stub, meta)
+    if not (surface and surface.valid) then return end
+    local cfg = ev or DEFAULT_EVENTS.ruins
+    if not cfg then return end
+
+    local pool = cfg.ruins_pool
+    if type(pool) ~= "table" or #pool == 0 then return end
+
+    local center = (ship_stub and ship_stub.position) or { x = 0, y = 0 }
+    local radius = tonumber(cfg.custom_spawn_radius) or 96
+    local attempts = math.max(1, tonumber(cfg.attempts_per_chunk) or 3)
+
+    for _ = 1, attempts do
+        local angle = math.random() * (math.pi * 2)
+        local distance = math.random(24, math.floor(radius))
+        local pos = {
+            x = center.x + math.cos(angle) * distance,
+            y = center.y + math.sin(angle) * distance
+        }
+
+        if is_non_water_tile(surface, pos) then
+            local ruin_name = pool[math.random(#pool)]
+            local ok, entity = pcall(function()
+                return surface.create_entity({
+                    name = ruin_name,
+                    position = pos,
+                    force = "neutral",
+                    raise_built = true
+                })
+            end)
+            if ok and entity and entity.valid then
+                debug("ruins spawned from planetary event on " .. tostring(surface.name) .. " at " .. tostring(math.floor(pos.x)) .. "," .. tostring(math.floor(pos.y)))
+                return
+            end
+        end
+    end
+
+    debug("ruins event failed to find valid spawn position on " .. tostring(surface.name))
+end
+
 -- ACTION: bright_day - increases sunlight and extends daytime
 ACTIONS.bright_day = function(surface, ev, ship_stub, meta)
     if not (surface and surface.valid) then return end
@@ -2807,6 +2879,62 @@ local function on_runtime_mod_setting_changed(event)
     end
 end
 
+local function is_ruins_surface(surface)
+    if not (surface and surface.valid) then return false end
+    if surface.platform then return false end
+    return true
+end
+
+local function try_spawn_ruin_on_chunk(event)
+    if not is_mod_enabled() then return end
+    if not (event and event.surface and event.surface.valid and event.area) then return end
+
+    local surface = event.surface
+    if not is_ruins_surface(surface) then return end
+
+    local ruins_cfg = (storage and storage.events and storage.events.ruins) or DEFAULT_EVENTS.ruins
+    if not ruins_cfg then return end
+    if math.random() > (tonumber(ruins_cfg.chance_per_chunk) or 0) then return end
+
+    local area = event.area
+    local center = {
+        x = (area.left_top.x + area.right_bottom.x) * 0.5,
+        y = (area.left_top.y + area.right_bottom.y) * 0.5
+    }
+
+    local dist = math.sqrt(center.x * center.x + center.y * center.y)
+    if dist < ruins_cfg.min_distance or dist > ruins_cfg.max_distance then return end
+
+    local pool = ruins_cfg.ruins_pool
+    if type(pool) ~= "table" or #pool == 0 then return end
+    local attempts = math.max(1, tonumber(ruins_cfg.attempts_per_chunk) or 1)
+    for _ = 1, attempts do
+        local ruin_name = pool[math.random(#pool)]
+        local pos = {
+            x = math.random(area.left_top.x, area.right_bottom.x - 1) + 0.5,
+            y = math.random(area.left_top.y, area.right_bottom.y - 1) + 0.5
+        }
+
+        if is_non_water_tile(surface, pos) then
+            local ok, entity = pcall(function()
+                return surface.create_entity({
+                    name = ruin_name,
+                    position = pos,
+                    force = "neutral",
+                    raise_built = true
+                })
+            end)
+            if ok and entity and entity.valid then
+                return
+            end
+        end
+    end
+end
+
+local function on_chunk_generated(event)
+    try_spawn_ruin_on_chunk(event)
+end
+
 local function on_entity_built(event)
     local entity = event.entity or event.created_entity
 --    register_crystal_bonus_override(entity)
@@ -2887,6 +3015,7 @@ return {
     on_entity_removed = on_entity_removed,
     on_object_destroyed = on_object_destroyed,
     on_surface_deleted = on_surface_deleted,
+    on_chunk_generated = on_chunk_generated,
     reset_crystal_mined_bonuses = reset_crystal_mined_bonuses,
     on_runtime_mod_setting_changed = on_runtime_mod_setting_changed,
     find_safe_teleport_position = function(surface, preferred_pos)
