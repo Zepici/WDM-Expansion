@@ -968,10 +968,14 @@ local function register_wdm_planet_events()
 
     local ok, err = pcall(function()
         for event_name, event_config in pairs(merged_events) do
-            if event_config.wdm_chance then
+            local chance = tonumber(event_config.wdm_chance)
+            local has_wdm_chance = chance and chance > 0
+            local has_runtime_action = event_config.action_name and ACTIONS[event_config.action_name]
+
+            if has_wdm_chance and has_runtime_action then
                 remote.call("WDM", "add_custom_planet_event",
                     event_name,                    -- name
-                    event_config.wdm_chance,       -- chance
+                    chance,                        -- chance
                     event_config.wdm_min_wap,      -- min_wap
                     event_config.wdm_min_tech_progress,  -- min_tech_progress
                     event_config.wdm_can_be_removed or false,  -- can_be_removed
