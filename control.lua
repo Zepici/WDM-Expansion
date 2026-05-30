@@ -5,6 +5,7 @@ local emergency_return = require("script.emergency_return")
 local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
 local change_events = require("script.change_events")
 local terminal_drain = require("script.terminal_drain")
+local mind_control = require("script.mind_control")
 local mod_commands = require("script.commands")
 
 emergency_return.init({
@@ -39,6 +40,26 @@ end
 
 local function on_surface_deleted(event)
     safe_call(planetary_events.on_surface_deleted, event)
+end
+
+local function on_chunk_generated(event)
+    safe_call(planetary_events.on_chunk_generated, event)
+end
+
+local function sync_chunk_generated_handler()
+    local enabled = false
+    if planetary_events and planetary_events.should_enable_chunk_generated_handler then
+        local ok, value = pcall(function()
+            return planetary_events.should_enable_chunk_generated_handler()
+        end)
+        enabled = ok and value or false
+    end
+
+    if enabled then
+        script.on_event(defines.events.on_chunk_generated, on_chunk_generated)
+    else
+        script.on_event(defines.events.on_chunk_generated, nil)
+    end
 end
 
 local function register_shared_event_handlers()
@@ -78,6 +99,9 @@ local function register_shared_event_handlers()
     script.on_event(defines.events.on_research_finished, function(event)
         safe_call(terminal_drain.on_technology_researched, event)
     end)
+
+    -- Mind control system
+    script.on_event(defines.events.on_script_trigger_effect, mind_control.on_script_trigger_effect)
 
     if defines.events.on_pre_surface_deleted then
         script.on_event(defines.events.on_pre_surface_deleted, on_surface_deleted)
@@ -124,6 +148,7 @@ script.on_event(defines.events.on_runtime_mod_setting_changed, function(event)
     safe_call(turret_buff.on_runtime_mod_setting_changed, event)
     register_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
+    sync_chunk_generated_handler()
 end)
 
 script.on_init(function()
@@ -132,10 +157,12 @@ script.on_init(function()
     turret_buff.on_init_or_configuration_changed()
     terminal_drain.on_init_or_configuration_changed()
     change_events.apply_default_event_overrides()
+    mind_control.on_init()
     randomize_wdm_blueprint_overrides()
     apply_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()
+    sync_chunk_generated_handler()
 end)
 
 script.on_configuration_changed(function(_cfg)
@@ -147,12 +174,15 @@ script.on_configuration_changed(function(_cfg)
     register_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()
+    sync_chunk_generated_handler()
 end)
 
 script.on_load(function()
     planetary_events.on_load()
     heat_pipes.on_load()
     terminal_drain.on_load()
+    mind_control.on_load()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()
+    sync_chunk_generated_handler()
 end)

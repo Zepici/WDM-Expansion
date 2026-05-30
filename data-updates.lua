@@ -3,6 +3,7 @@ local utils = require("utils")
 
 utils.modify_data(data.raw["technology"], require("prototypes.technologies.modified"))
 utils.modify_data(data.raw["recipe"], require("prototypes.recipes.modified"))
+utils.modify_data(data.raw["mining-drill"], require("prototypes.entity.modified"))
 
 local stun_sticker = data.raw["sticker"] and data.raw["sticker"]["stun-sticker"]
 if stun_sticker and not data.raw["sticker"]["wdm-short-stun-sticker"] then
@@ -80,10 +81,34 @@ end
 
 table.insert(data.raw.unit["maf-boss-biter-1"].loot, {
     item = "emergency-return",
-    probability = 0.25,
+    probability = 0.2,
     count_min = 1,
     count_max = 2
 })
+
+if data.raw["mining-drill"] then
+    for name, drill in pairs(data.raw["mining-drill"]) do
+        if name ~= "ancient-drill" and name ~= "burner-mining-drill" then
+            if drill.resource_categories then
+                local has_category = false
+                for _, cat in ipairs(drill.resource_categories) do
+                    if cat == "warponium-solid" then
+                        has_category = true
+                        break
+                    end
+                end
+                -- Если такой категории у бура ещё нет, добавляем её в список
+                if not has_category then
+                    table.insert(drill.resource_categories, "warponium-solid")
+                end
+            else
+                drill.resource_categories = {"warponium-solid"}
+            end
+            
+        end
+    end
+end
+
 
 if mods["Cold_biters"] then
     for k = 1, 10 do
@@ -103,6 +128,21 @@ if mods["Cold_biters"] then
             end
         end
     end
+end
+
+if mods["ZombieHordeFaction"] then 
+    for k = 1, 10 do
+        local name = "maf-boss-zombie-" .. k
+        local unit = data.raw.unit[name]
+        
+        if unit and unit.max_health then
+            unit.max_health = unit.max_health / 2
+        end
+    end
+end
+
+for k = 1, 10 do
+    data.raw.unit["mind-control-unit-" .. k].loot = table.deepcopy(data.raw.unit["maf-boss-biter-1"].loot)
 end
 
 if mods["teleporting_machine"] then 

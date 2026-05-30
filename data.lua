@@ -28,11 +28,14 @@ utils.add_data(require("prototypes.items.crystal"))
 utils.add_data(require("prototypes.recipes.crystal"))
 utils.add_data(require("prototypes.technologies.crystal"))
 
--- Категории
-utils.add_data(require("prototypes.recipe-category.warponium"))
+utils.add_data(require("prototypes.entity.warponium-ore"))
 
+-- Категории
+utils.add_data(require("prototypes.custom-category.warponium"))
+utils.add_data(require("prototypes.items.modified"))
 -- Звуки
 utils.add_data(require("prototypes.other.sounds"))
+utils.add_data(require("prototypes.other.explosions"))
 
 -- Панелька
 utils.add_data(require("prototypes.entity.warponium-solar-panel"))
@@ -45,3 +48,11 @@ utils.add_data(require("prototypes.items.conversion-plant"))
 utils.add_data(require("prototypes.recipes.conversion-plant"))
 utils.add_data(require("prototypes.entity.conversion-plant"))
 utils.add_data(require("prototypes.entity.terminal-drain"))
+
+-- Контролирующий враг
+utils.add_data(require("prototypes.entity.mind_control_unit"))
+
+-- Варпониевый гиперкуб
+utils.add_data(require("prototypes.items.warponium-hypercube"))
+utils.add_data(require("prototypes.recipes.warponium-hypercube"))
+utils.add_data(require("prototypes.technologies.warponium-hypercube"))

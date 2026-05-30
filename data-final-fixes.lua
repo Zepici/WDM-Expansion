@@ -33,6 +33,7 @@ local function should_patch_factoriopedia_simulation(prototype_name)
     return string.sub(prototype_name, 1, #"wdm_pirate") == "wdm_pirate"
         or string.sub(prototype_name, 1, #"cyborg_strafer") == "cyborg_strafer"
         or string.sub(prototype_name, 1, #"maf-boss") == "maf-boss"
+        or string.sub(prototype_name, 1, #"mind-control-unit") == "mind-control-unit"
         or (mods["ZombieHordeFaction"]
             and string.find(prototype_name, "zombie", 1, true))
         or (mods["ArmouredBiters"]
@@ -54,17 +55,15 @@ local function should_patch_factoriopedia_simulation(prototype_name)
                 or string.find(prototype_name, "explosive-spitter", 1, true)
             ))
 end
-
 local function is_boss(prototype_name)
     return type(prototype_name) == "string"
         and (
             string.find(prototype_name, "wdm_pirate_boss", 1, true)
             or string.find(prototype_name, "cyborg_strafer-boss", 1, true)
             or string.find(prototype_name, "maf-boss", 1, true)
+            or string.find(prototype_name, "mind-control-unit", 1, true)
         )
 end
-
--- достаём цифру (1–10) из имени
 local function get_boss_level(prototype_name)
     if type(prototype_name) ~= "string" then return nil end
 
@@ -77,7 +76,6 @@ local function get_boss_level(prototype_name)
 
     return nil
 end
-
 local function patch_simulation_init(init_code, prototype_name)
     if type(init_code) ~= "string" or init_code == "" then return init_code end
 
@@ -94,7 +92,6 @@ local function patch_simulation_init(init_code, prototype_name)
             zoom_value = 1
         end
     end
-
     for line, newline in init_code:gmatch("([^\r\n]*)(\r?\n?)") do
         if line == "" and newline == "" then break end
 
@@ -115,7 +112,6 @@ local function patch_simulation_init(init_code, prototype_name)
 
     return table.concat(patched_lines)
 end
-
 local function get_fallback_simulation()
     local base = data.raw.unit and data.raw.unit["small-biter"]
     if base and base.factoriopedia_simulation then
@@ -123,7 +119,6 @@ local function get_fallback_simulation()
     end
     return nil
 end
-
 for _, prototypes in pairs(data.raw or {}) do
     for prototype_name, prototype in pairs(prototypes or {}) do
 
@@ -141,6 +136,40 @@ for _, prototypes in pairs(data.raw or {}) do
         end
     end
 end
+
+local targets = {
+    ["wdm-ore-warponium"] = true,
+    ["underground-warponium"] = true
+}
+
+local iron_ore = data.raw.resource and data.raw.resource["iron-ore"]
+local base_simulation = iron_ore and iron_ore.factoriopedia_simulation
+
+if base_simulation and base_simulation.init and not base_simulation.init_file then
+    for name in pairs(targets) do
+        local res = data.raw.resource and data.raw.resource[name]
+        if res then
+            local sim = table.deepcopy(base_simulation)
+            local patched_lines = {}
+            
+            -- Построчно меняем имя руды во всех вызовах create_entity
+            for line, newline in sim.init:gmatch("([^\r\n]*)(\r?\n?)") do
+                if line == "" and newline == "" then break end
+                
+                if string.find(line, "create_entity", 1, true) then
+                    line = line:gsub('name%s*=%s*"[^"]+"', 'name = "' .. name .. '"', 1)
+                end
+                
+                patched_lines[#patched_lines + 1] = line .. newline
+            end
+            
+            sim.init = table.concat(patched_lines)
+            res.factoriopedia_simulation = sim
+        end
+    end
+end
+
+
 
 local red_refined_concrete = data.raw.item and data.raw.item["red-refined-concrete"]
 if red_refined_concrete then
@@ -283,7 +312,7 @@ data:extend({ mini_turret, mini_item })
 local scaled_boss_loot = deepcopy(data.raw.unit["maf-boss-biter-1"].loot or {})
 for _, drop in pairs(scaled_boss_loot) do
     if drop.probability then
-        drop.probability = drop.probability / 1.2
+        drop.probability = drop.probability / 1.3
     end
 end
 
@@ -358,3 +387,31 @@ if settings.startup["wdm-expansion-zombie"] and settings.startup["wdm-expansion-
         spitter_spawner.max_count_of_owned_defensive_units = 25
     end    
 end
+
+--[[
+if data.raw.planet["nauvis"] then
+    local map_gen = data.raw.planet["nauvis"].map_gen_settings
+    map_gen.autoplace_controls = map_gen.autoplace_controls or {}
+    map_gen.autoplace_controls["warponium-ore"] = {}
+    
+    map_gen.autoplace_settings = map_gen.autoplace_settings or {}
+    map_gen.autoplace_settings.entity = map_gen.autoplace_settings.entity or {}
+    map_gen.autoplace_settings.entity.settings = map_gen.autoplace_settings.entity.settings or {}
+    map_gen.autoplace_settings.entity.settings["warponium-ore"] = {}
+end
+if data.raw["map-gen-presets"] and data.raw["map-gen-presets"]["default"] then
+    for _, preset in pairs(data.raw["map-gen-presets"]["default"]) do
+        if preset.basic_settings then
+            preset.basic_settings.autoplace_controls = preset.basic_settings.autoplace_controls or {}
+            preset.basic_settings.autoplace_controls["warponium-ore"] = {}
+            preset.basic_settings.autoplace_settings = preset.basic_settings.autoplace_settings or {}
+            preset.basic_settings.autoplace_settings.entity = preset.basic_settings.autoplace_settings.entity or {}
+            preset.basic_settings.autoplace_settings.entity.settings = preset.basic_settings.autoplace_settings.entity.settings or {}
+            preset.basic_settings.autoplace_settings.entity.settings["warponium-ore"] = {}
+        end
+    end
+end
+]]
+
+
+

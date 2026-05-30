@@ -1,10 +1,12 @@
-﻿-- Made by ZepCannon
+-- Made by ZepCannon
 local util = require("util")
+local terminal_drain = require("script.terminal_drain")
 
 local function has_active_mod(mod_name)
     return script and script.active_mods and script.active_mods[mod_name] ~= nil
 end
 local HAS_SPACE_AGE = has_active_mod("space-age")
+local HAS_ZOMBIE_HORDE = has_active_mod("ZombieHordeFaction")
 
 -- ============================================================
 -- КОНСТАНТЫ И КОНФИГУРАЦИЯ
@@ -31,6 +33,7 @@ else
 end
 
 -- Конфигурация событий по умолчанию
+local RUINS_BLUEPRINT_POOL
 local DEFAULT_EVENTS = {
     laser_boss = {
         prototype = nil,
@@ -55,8 +58,7 @@ local DEFAULT_EVENTS = {
         waves = { min = 1, max = 3 },
         wave_min_delay_seconds = 30,
         wave_max_delay_seconds = 120,
-        tech_influence = 0.6,
-        tech_tiers = nil
+        tech_influence = 0.6
     },
     earthquake = {
         -- WDM planet event parameters
@@ -132,6 +134,45 @@ local DEFAULT_EVENTS = {
         action_name = "bright_day",
         solar_multiplier = 2.0,
         daytime_ratio = 0.8
+    },
+    has_boss_2 = {
+        -- WDM planet event parameters
+        wdm_chance = 0.09,
+        wdm_min_wap = 60,
+        wdm_must_have_on = 20,
+        wdm_min_tech_progress = 0.2,
+        wdm_no_repeat = true,
+        wdm_requires_enemies = true,
+        wdm_can_be_removed = false,
+        wdm_difficulty_add = 0.015,
+        wdm_alarm = true,
+        wdm_min_delay = 300,
+        wdm_max_delay = 480,
+        -- Internal config
+        action_name = "spawn_boss_at_world_edge",
+        spawn_count = 1,
+        edge_distance_from_ship = 300,
+        spawn_opts = {
+            spacing = 120,
+        },
+        tech_influence = 0.55
+    },
+    ruins = {
+        -- WDM planet event parameters
+        wdm_chance = 0.065,
+        wdm_min_wap = 30,
+        wdm_min_tech_progress = 0,
+        wdm_no_repeat = true,
+        wdm_requires_enemies = false,
+        wdm_can_be_removed = false,
+        wdm_difficulty_add = 0.0,
+        wdm_alarm = false,
+        -- Internal config
+        action_name = "ruins",
+        chunk_spawn_chance = 0.008,
+        spawn_attempts = 2,
+        blueprint_pool = RUINS_BLUEPRINT_POOL,
+        tech_influence = 0.4
     }
 }
 
@@ -682,6 +723,9 @@ local function init_event_storage()
     init_storm_destroy_registrations()
     storage.crystal_overgrowth_active = storage.crystal_overgrowth_active or {}
     storage.crystal_overgrowth_blocked_zones = storage.crystal_overgrowth_blocked_zones or {}
+    storage.ruins_active_surfaces = storage.ruins_active_surfaces or {}
+    storage.ruins_trigger_force_by_surface = storage.ruins_trigger_force_by_surface or {}
+    storage.ruins_blueprint_pool = storage.ruins_blueprint_pool or RUINS_BLUEPRINT_POOL
     storage.crystal_bonus_overrides = storage.crystal_bonus_overrides or {}
     storage.crystal_destroy_registrations = storage.crystal_destroy_registrations or {
         by_registration = {}, -- [registration_number] = {key, bonus_override}
@@ -692,7 +736,7 @@ local function init_event_storage()
 end
 
 local function is_surface_event_repeat_persistent(event_name)
-    return event_name == "bright_day" or event_name == "electromagnetic_storm"
+    return event_name == "bright_day" or event_name == "electromagnetic_storm" or event_name == "ruins"
 end
 
 local function get_triggered_surface_event_scope_key(surface, ship)
@@ -863,6 +907,419 @@ local function take_crystal_bonus_override(entity)
     return bonus
 end
 
+-- ============================================================
+-- THREAT LEVEL: evolution + tech
+-- ============================================================
+
+local function get_threat_level(surface, force, opts)
+    opts = opts or {}
+    local tiers = opts.tech_tiers or DEFAULT_TECH_TIERS
+
+    -- EVO
+    local evo = 0
+    local enemy = game.forces and game.forces["enemy"]
+    if enemy then
+        if enemy.get_evolution_factor then
+            local ok, val = pcall(function() return enemy.get_evolution_factor(surface) end)
+            if ok and type(val) == "number" then evo = val end
+        elseif enemy.evolution_factor then
+            local ok, val = pcall(function() return enemy.evolution_factor end)
+            if ok and type(val) == "number" then evo = val end
+        end
+    end
+    evo = math.max(0, math.min(1, evo))
+
+    -- TECH
+    local tiers_total = #tiers
+    local tiers_completed = 0
+    if force and force.valid then
+        for _, tier_opts in ipairs(tiers) do
+            local done = false
+            for _, pack_name in ipairs(tier_opts) do
+                local ok, rec = pcall(function() return force.recipes and force.recipes[pack_name] end)
+                if ok and rec and rec.valid then
+                    if rec.enabled == true then
+                        done = true
+                        break
+                    end
+                end
+            end
+            if done then tiers_completed = tiers_completed + 1 end
+        end
+    end
+    local tech = (tiers_total > 0) and (tiers_completed / tiers_total) or 0
+    tech = math.max(0, math.min(1, tech))
+
+    -- combine
+    local tech_weight = tonumber(opts.tech_weight) or 0.5
+    tech_weight = math.max(0, math.min(1, tech_weight))
+
+    local threat = evo * (1 - tech_weight) + tech * tech_weight
+    threat = math.max(0, math.min(1, threat))
+
+    return { evo = evo, tech = tech, threat = threat }
+end
+
+-- Пул чертежей
+RUINS_BLUEPRINT_POOL = {
+    { blueprint_string = "0eNqd011qhDAQB/C7zHNc1PUj8SqllKiDG6pRYiy7iNAr9aEPpdAz2Bs1urDVJUu7viVh8pt/lOkhLTtslJAakh5EVssWkoceWlFIXk5nklcICbS6VrxAR3P5DAMBIXM8QuINxFJ8QK4dPGYHLgtUi3J/eCSAUgst8Nxo3pyeZFelpjLxiLUhgaZuzaVaTl0M5MQs3IUETmbpMZftQtMkFwqzc1Ew5bqy/YvdiMbAtVOoupO5VY8Wemx0i7ff6vnXaalFD1b6n6ZnzxiSG//E+kVX2iqh51vwaI3fzLlf5HTtOeMN1I0n039SwYWijNopdncqypid8twN1hzLTIzQWJmLv7NKoOQpmpGD8W38Gj/Gz/H9+9Ucv6BqZy6MfBYwFtLA9d2ADsMPlC9BjQ==", chance = 1 },--бойлер
+    { blueprint_string = "0eNqdm01u40YQhe/CtTRg/7N9lWAwkG3GI0CmDIlOMjB8gqxykwTZBMgllBuFtmFQtlmu92rnP32ubr7qqn7sfmgud/f93WE7jM3FQ7O92g/H5uKnh+a4vRk2u6efDZvbvrloxsNmON7tD+P6st+NzeOq2Q7X/W/NhXtcLfz55njsby932+Fmfbu5+r4d+rU/+5B//Lpq+mHcjtv+5R8+f/Pj23B/e9kfJurqlXQc99OHf93sds2qudsfp4/sh6f/NGHWpfuSVs2P6auYv6THp1DegTwIKhoogKCkgSII8hoogaBWA2UQ5DRQwUBZfWodCMoaqIKgqIFcC5LU5+9AbWdVAA4Udw4qCVR3VrXkQHlnVUwO1HfSnx0o8KTPE6jwpI8OlHhUc8WBGo9VXStBjUd1sfT8+h0FkqdJSSAFenRSTJEmSTHNGr/ZjP3n4woCY1b3uyL9aVGZvprq8fX20F+9/EVcYs96/3lzHNfb4dgfxuk3C+jwJtA3aOeX2B0Rd0vGXQm249ihNcUdILYzxY2xPc4+q9DYnAQTG4s7EuxCxp0Idibjzqa4MXYh2JGcEyIvz7odjF1NcUNzEltT3BibyMuzvg1jM3lJrieRyUtyPYlEXqZKsom8TKxOMlzTkidrWiTyMgUy7o7uOrywA600Seg9ElML55xrBZrDu40Z5t5PXreE9jjavUEvwQIMOysaEoxJo/bNFOqjTrjUWzXQTKtGIhW2pw+dQOrw/jlUgVEtGpYiyqaMkGLLc0YsOmqfdZwi07PMWcQiM9BMpzIjy0xFZSZLsj0/azXZcjaxK8QubO6J+qSriDiXlc5iyTZsaVIRSM6UfVJcRNFo1dCIolFVWDRUIBGGV4l5nyLC8O4q63OG2w9n64kE6/BiqAttFv/N/bAe7w+HfjHR/Ws6LtrctOEmSbWjDbcgmFsdbbgFwdzqgikZJRpdDuZGTmQmumzpo840Ux97oUthVZl8IZBIfCEQNiaVLwTCxqQ6iykaIBOjeosBCLKDxQAE2dFSzqQJThbHDwyUcc4qyS6WMixNQmexD8FAq8U+xNiubS39Q5BejTpLAyHSvMUjRAceLCYhCjdt5T/Cu0W4besSMDi9t5eWcNfym/tWQp2VqLvddhTWqjMNIA+J2e6HNzHq8+haE9xhcGcxFz/CF51Lhx4mOJOA9Nwc/aY1OAkVWTX5TkIlGlUlVLZ0tnJkxYQTo+ssK4XvMBFWExxyOZyn+z9fpKMxJifAiydtvAknRhcs68RzdMAsRhO8YPA5i3aby09Lsjz6rDFanVFMOgQHSe+NZOGYyo1PUMMRaP/AJ+kAGG0geKkDCLSD4KVeMJgsBDmyaMKJ0am5UHSGlgsJYBSN4XWGrWhgvWuwFQ2sd4180ZC6DeY1/9x2+hbrsKKthkhdVrTlhjj2OTd2++Fm/X0zXPfX2IkvOUbTpsVjzXY0vXDxWLMd6Tcu8szixvMsKod1TBH0oZ9esbxgl4/atvBK5qS28+ztvcAIOsPDq6HMCJw1L01JNLw7l4NKrJyctFvg38PLUdF7dSce1u5olNTaJVTT4XWmlg99m85puoIt5tlZ/E+Y7i0OKEwPFmsRpkfLWTmYzvjOgaZny1k8mF4sp/Fgemc5jwfTmRYus/TSWs77wXTGOEs03RvOE36EL27wSrBYfnDk9D0GcfkvtLnmpJ1oQa+jZR1V2Nt/Mqpj7//JqMreABRR6AGCuVWXUY69BSijPHsPUEahF9OqjorspUIZBao967rqMnuHT0ahl9OAuQLVnoC5AtWe9LlCjwckPQcrqPak52D17O1CGRXY64UyKrL3C2UUv3d5Rn1dNduxv50+Nl8yXz3t6/rd9LPTH6d/Tn9/O/17+vP013+/T7/5pT8cn3Ep+xprTV1sfRun7v5//03qpA==", chance = 1 },--биг_лабы
+    { blueprint_string = "0eNqtk1FOwzAMhu/i52wqWdO1vQpCU9uZEalNSpJWTFUkjsQDT0hwhnIj3E2slVYhNnhLLPv7f1t2B3nZYG2kcpB2IAutLKS3HVi5U1k5xFRWIaRgdK5rbRx4BlJt8QnSG3/HAJWTTuKx6vDZb1RT5WgogX1XW6dNtsNF8YDWAYNaW6rSahAg0iISfCkY7OnJAxEvBakYfGwoe3MvS4fGDqkWi6HqKDa68J6dafMLtFf/rL06adeZtbLFRW10K7dofjART0ysycQMN7yGG024Yp4rTtyMevwdVkyw4Tw2YmfLMzv90d6fJ7++ZkLhpBU+tEJrLR1WRBmvg0GZ5UgXAf3r53P/0b/3b/0LhVtyecCJiCdhkog4DHgQxt5/ATmBH8g=", chance = 0.05 },--дронка
+    { blueprint_string = "0eNqdlW1ugzAMhu/inxNULZB+cJVqqgJYayRIUJJWqxAn2SV6gEm7AkdaUtqytWFt9o+YvE9em9g0kJU7rCXjGtIGWC64gnTdgGJvnJY2xmmFkAKVTG8r1CwPc1FljFMtJLQBMF7gO6SzNnCoCsxZgdItidrXAJBrphn2p54Whw3fVRlKwwwuHFXRsgxLWtUQQC2UkQhuz7GYWTIhARwgDZfzCWmtkRtQ9CQovoISNyh+EhQ9AiXejogbRLxrNOJo/iSIPAItvB2NpLb0djQCWnkXO3aDZlPv3MZIw9129MifN8p0Gpg+1VKUmwy3dM+Mwmw7czbmXXHSKhv9uVo3tuPETtc7fV62TnNDv7jb/s/ajfkbUDcWFdq1DSpN7SAyVRY1StofAC/gdjk040X6wOP86nFqvkoABZOY9ztsyi7Tqt+gfj+bUXUde7aEpqqalechdl+a86GLdrg9WnAMa6q3YDO7vz/+kugyAp+XxP6SxF9C/CWXXIh/LsQ/F+Kfyz+MJf7GRiTmtjGNlYkOP+8ASpqh+fVC99Edu8/uqzua4B6lOpHJPFolqxVZJtNomizb9hvtkZks", chance = 1 },--лампа
+    { blueprint_string = "0eNqd12tKw0AQAOC77O+kZJ/ZzVVEJNVFAskmNKlaSkBP4HVEwTOkN3LbggZk2GH+9bVfJzsz2cmRbdu9H3ZNmFh1ZM19H0ZW3RzZ2DyGuj1/FurOs4qNfVvv8qEOvmVzxprw4F9YxefbjPkwNVPjrwsvbw53Yd9t/S7+IPsFpj74/LluW5axoR/jkj6c/yAyudFmozN2iC95oeRGz3P2zxJYS6UtibV02lJYS6QtjbVk2jJYq0hbJdbiacsiLWXTlsNaLm3xAoshipVjK1+VCAxb+gpR+hxb+wpR+xxd/OtkFgC2qv4uOnlbd0OywzmArcp/de9K9SWklZQMQNdpCZsmLYA5CuaAW2yB3jSdDk1wSgpATWC1dbODmiQkFMQUBYNyoCkJLQHMUCIzAEZpAjAySyoODWiOVByAJgvKhSoA4xQMikxQikMAmKRg0ESl0Pk0iNAoRwGIkY4CUCspuwYcBZJ0FACHlHSEaRuKTGF7QJcIjBNmdxAThOEdxCRh4gYxRRi5QUwT5mQQM4RBGcRKwqAMYpYwKF+x+OzZTL6LK/+eYjPW1tvY3BU7vS3fy9fp/fS6fC4f8YsnvxsvoDbCKee0VYUolJ3nH92psSI=", chance = 0.3 },--солярки
+    { blueprint_string = "0eNp9j10KwjAQhO+yz2lpY6u2VxGR1i51Id1IkvpDCQieyJvYG5kq+qL4tjvsfDszQK163BtiB+UAtNVsoVwNYKnlSk0aVx1CCXVvGE3UERO3UWNIKfACiBs8QZn6tQBkR47wBXgu5w33XY0mHIg36Kh1gxxtd2gdCNhrG0yap1cBFC1kFucCzmFMZzKNc+/FF02Kf7F+Qj/IxE9ZyWE32T/tBaiqxtAY7rfxOl6CcEBjn5B8LousKPJllsgkW3r/ACGxZwY=", chance = 1 },--бур
+    { blueprint_string = "0eNqdl+FumzAQx9/Fn6ECg8HOq0xTRcBNLRnDDKytIqRpm/ZC06R+2Tskb7QjUxPS2sHmG2D7d3fc/+zzHm3lwFstVI82eyTKRnVo82mPOrFThZy+qaLmaIO45GWvRRnWQgm1CystpERjgISq+DPaxGNgWFVyBYsehh2fTcXj5wDBgOgF/2/t9PJyr4Z6yzWwgrf1rWg5ClDbdDC5URMZACFh+I4E6AUecRSxOzJO1t9R8JnS60J1baP7cMtlb+LRbMajwAtQJTREfJqUGuiJDz33pac+9NSXTnzoxJeenemyAaE8FpD1KhSq47qHcZMNfMtGjA1G8rOR8pHXoixk2MpCGUNgyQyfn/AAn5S1Qd0gH4ZJ1kUpKvQ2cP9lKCSYgwmq0XUxCf2DCzS4XRumQOnMk8wsW7Yo/iuxWihxtIwhDph4RZCJA/dSnLMtwgSL7LkbQLxiqMNWNyXvOnDKL4Fx4rfPpJZYUj8MsWDIMiZy8CZbxsQOmHxZP9QBQ5cxzAHjWRQWDHYoitwBs3w+Xe3JNgz2K1EbZlnFVxVpw6T+lX6lR/x+36YmK8RPVtjibOaXgcSCyX0OwtjBL7oWaPOQeQCv0hE5NTGRj7/UGx/74Jk3fnWH54Zf3eK54dO1XZgb3qvJS7zx2Vqlx2alJ5dafGqaiqsQGrtuQSkxY9SCu1Tizc4znaEs94iEufYqZAabepXpniN6XsPKyzUrQLKAHwXfjr8Ofw5/j9+P3w6vx5/HH4ffh1cY/sp1d8KSDLOUMXAywlFKx/EfDixWOg==", chance = 0.1 },--центрифуги
+    { blueprint_string = "0eNqV0U0OgjAQBeC7zLoahFagVzHGAE7MKJSGH6MhXXgQ7+AJPAPcyAILopIYl53M+9K8aSBOa9QFqQpkA5TkqgS5aaCkg4rSfqaiDEGCrjN9jJITGAak9ngBuTJbBqgqqgjH1PC47lSdxVjYBfaVZqDz0gZy1ds94vtLweAKciECsRSW31OBybgSGPalupNKGudEPomuFWcM76chJsObN/g//1jNG+KtoR+G89mNrZ8qzGx6uiKDNIrRXg7ae/vobu2zu9nhGYtySIm1G/IwFAF3XIcHxrwAs82mig==", chance = 0.4 },--насос
+    { blueprint_string = "0eNql1M1qhDAQAOBXKXOOi4m/8VVKKf4MuwGNYtzSRYT22MfpYaH00GfQN+qsS9tDs7WyN2OGbybjxB6yco9Nq3QHSQ8qr7WB5LYHo7Y6LU/vdFohJJAag1VWKr11qjTfKY2OgIGB0gU+QsKHOwaoO9UpPAvz4nCv91WGLQWwL6lRDQKDpjYUXOtTDgKcMBabgMGBHoXru5tgGNgvRSwrfFnx1incrvjsz95Y1Egu1xas6pMX25VwnSLtSvStlDWdbZfSty4cpQ22He0v9G2ujUGhWszPQVxYksTXJZH/SiLX9SOy94O7qwbHCy8wfB1zqRpx1QCeWbq1qsOKjJ8fAYMyzZAuP4zH6WU83kzP4+v4MT3R4m18p/0HbM3sBqGQvpRB7Ls00vEwfAJoUmDw", chance = 0.65 },--еще_сборщик
+    { blueprint_string = "0eNqV1F1ugzAMAOC7+DmpSBoocJVqmvixaCRIUALTqorH3amadgh2o4VW6g9KR/sGwflsJzIHyOseWyNVB+kBZKGVhXR7ACsrldXTmsoahBSKHTayyGra1pkLHghIVeInpGwgnvBWtngTxIc3Aqg62Uk8Jzi97N9V3+RonELudhJotXXBWk2mA2jMo1VIYO8emeDrVThMeWcKX1bCZWVNHjTt88SNx/yeuHi1VhXdZe5MSiqVRdO57z6Vz1QCpTRYnIOEJ0d4ySGNVtQVbv31Bsv1RsunuLkqLPYrmzuFdppWRveqXPSSeb+Me/j4pat+VGTympL4FRa80qv4r1ff3bInhmP9RJVPTAefM25sZYeN23P9URCosxzdtMPv13gcf8bv8egWP9DYExZGPBFJEsYi4IGIh+EPsIZkKg==", chance = 0.2 },--химки
+    { blueprint_string = "0eNptj1sKgzAQRfcy31FUjGi2UkrxMbQBnYiJbUWykm7C7sQlNbFgC+3nXO453JmhakfsB0kGxAyyVqRBHGbQ8kxl6zMqOwQBbVmBZSCpwTuI2B4ZIBlpJL6B7ZhONHYVDq7AvkEGvdKuq8gbHZ+kRcgZTCCCmEcht5b9KJJdcVOqQQrqC2rzz5XtLq+1fps02Dny8x3zQ9B9BOtjXdbnusQuu+KgNxPPkiItCp6nURKlubUvewVcbQ==", chance = 1 },--лаба1
+    { blueprint_string = "0eNqV1N1qwyAUB/B3Ode25EOzmFcpoyTbYQjGlMRuK0Fo9yZ7g+1ibAy2ZzBvNNte5GIJ0StRPD/+ip4eKrnHXSuUhqIHcdeoDopND514UKU8r6myRiig043C1VMpJRgCQt3jMxSxuSWASgst8Fp3mRy2al9X2LoNZKKewK7pXEmjzr5jWLxmBA5QrDLG1swY8g9K/KBkhOg0lPpBdDERDU6UTkPMD2KLUOYHZYvQjR+UjlA0DeXBlx1PQzz4aDOJ4ihYmokUe77tfDlTEvpLKJ+R0tBHOSvR0Hu6Sq4fCI21KxsbCwFZVuiaCdjX4cV+2B/7bb+2w9G+2U/77sbf4eR2PWLbXWiWJZxyznIaJRHNjfkD3duEaw==", chance = 1 },--стенки_разброс
+    { blueprint_string = "0eNqd1OFugjAQAOB3ud/FlEJReJVlMVVvrAkW0x7bjCFZ9kQ+ir7RiibqTAmMf9D2vl7v0h5gVTW4s9oQFAfQ69o4KF4O4HRpVNWNGbVFKEBZ0lWFdh9RYy0StAy02eAXFHHLAgGOaoPRp6qqh6WifWWAhjRpvG50+dkvTbNdofUWC8Qz2NXOh9Sm8z0TZXI+kwz2/lNwns1k2+XwZImxVjZsJWMtOWylY6102JKst0FDVfO6b8xGW1xfF/m8bshSNVQvSdkSSZsSCrINBvbPppwlDZ9lPsWSYWtxs7StTbR+RxesSMYfLBG28ilWErZifsPelKNIG4eW/EzonPlTbn+6FYsQH0/kk3H8/UqVinCwOT0FjZP/MX21nHSReA8mp2Bxh/knTRNufeT9MWVQqRX69xBOx/P3+ed09EMfaN2FkpnI0zyXi5QLni7a9hf4UcJK", chance = 0.025 },--арта
+    { blueprint_string = "0eNqdmM+O2jAQxt/FZ2eVOHYS51UQQgGsrSUnQY4pu0Icupc99Hn6HuWN6rDaklYe7NkTwjI/zwzffP5zJltzVAerB0faM9G7cZhIuzqTST8PnZnHhq5XpCWTGweVnTpjyIUSPezVC2mLCw1NHU1ns75zVr8sJrPLmhI1OO20+ljk9uV1Mxz7rbKeRgOLUXIYJ/+TcZhX8JjmSVDyStqszJ/EZQ7gPwxLwhRljFOmcUSMw9M4PMYRaZwqxqnSOHWMUydx/obDZBjTJGHqGEYiMU0YU+Rp1clj8RQFFgRFlKjnIhrRXdDPnVMBBPsHQcleW7X7mMBDQI7sNDBFgQVBKS61rZTJdt/U5B41G0iqE0kimlyD7H8QJJGGBOXG8sTcor3LCqSXgCCGBQFFYiXSJUEQj3VLg+sWlihyGa1VmoGzqEWxGguCarWQeO8ZmTK+ElbvssNo1KM9oQaAEmueFbCH51jzhEBoOwdSK1m6C1cpuipLrHlCKaLtHErxrvTTvt8ctPWJbkw3KZu5o7Uq5DXsU2JBIt7XodhqrIlCoAYLgsousfsDAOJ4Wwdy42hbh0BoW4dyQ9s6BELYelL78a+IXT4SO6+wGwWUK9rfIVCDBUF6wJ7SOXAVynFXRZCDvHIyAXAYbgNceDxELLEigFLkyNBkNDSB/BNLgFNhe5oBILTOIdBC58s3jMB54RMUxKAP6gVwU8+xFbqB1pScvGnNbywrfzQT1MtTrOlq/qBeD2LtZ2ines+9P/9QYrqtMn7s+v771/XH9e360w9+V3a6LSUqJrmUouE5y7l3rj+IEc9T", chance = 0.1 },--честы
+}
+if DEFAULT_EVENTS and DEFAULT_EVENTS.ruins then
+    DEFAULT_EVENTS.ruins.blueprint_pool = RUINS_BLUEPRINT_POOL
+end
+
+local function get_ruins_blueprint_pool()
+    return storage and storage.ruins_blueprint_pool or RUINS_BLUEPRINT_POOL
+end
+local function normalize_ruins_blueprint_pool_entries(pool)
+    if not pool then return {} end
+    local entries = {}
+    for _, item in ipairs(pool) do
+        if type(item) == "string" and item ~= "" then
+            entries[#entries + 1] = { blueprint_string = item, weight = 1 }
+        elseif type(item) == "table" then
+            local bp = item.blueprint_string or item.blueprint or item[1]
+            if type(bp) == "string" and bp ~= "" then
+                local w = tonumber(item.weight) or tonumber(item.chance) or tonumber(item.probability) or 1
+                w = (type(w) == "number") and w or 1
+                if w > 0 then
+                    entries[#entries + 1] = { blueprint_string = bp, weight = w }
+                end
+            end
+        end
+    end
+    return entries
+end
+
+-- Выбор чертежа из пула с учетом весов (weight/chance). Строковые записи равны weight=1.
+local function pick_ruins_blueprint_from_pool(pool)
+    local entries = normalize_ruins_blueprint_pool_entries(pool)
+    if not entries or #entries == 0 then return nil end
+
+    local total = 0
+    for _, e in ipairs(entries) do total = total + (e.weight or 0) end
+    if total <= 0 then
+        return entries[math.random(#entries)].blueprint_string
+    end
+
+    local r = math.random() * total
+    local acc = 0
+    for _, e in ipairs(entries) do
+        acc = acc + (e.weight or 0)
+        if r <= acc then
+            return e.blueprint_string
+        end
+    end
+
+    return entries[#entries].blueprint_string
+end
+
+-- Заполнение лута в контейнерах руин в зависимости от уровня угрозы
+local RUINS_LOOT_POOL = {
+    {name = "iron-ore", min = 1, max = 100, chance = 0.1},
+    {name = "copper-ore", min = 1, max = 100, chance = 0.1},
+    {name = "coal", min = 1, max = 100, chance = 0.1},
+    {name = "stone", min = 1, max = 100, chance = 0.1},
+
+    {name = "steel-plate", min = 1, max = 25, chance = 0.2, min_threat = 0.1},
+    {name = "firearm-magazine", min = 5, max = 15, chance = 0.2},
+
+    {name = "electronic-circuit", min = 1, max = 20, chance = 0.35, min_threat = 0.3},
+    {name = "uranium-ore", min = 1, max = 15, chance = 0.35, min_threat = 0.3},
+    {name = "wdm-ore-warponium", min = 1, max = 40, chance = 0.35, min_threat = 0.3},
+
+    {name = "advanced-circuit", min = 2, max = 10, chance = 0.3, min_threat = 0.7},
+    {name = "processing-unit", min = 1, max = 10, chance = 0.1, min_threat = 0.7},
+
+    {name = "spidertrom", min = 1, max = 1, chance = 0.025, min_threat = 0.8},
+    {name = "green-refined-concrete", min = 10, max = 50, chance = 0.025, min_threat = 0.7}
+}
+
+local function fill_ruins_loot(entities, current_threat)
+    if not entities or #entities == 0 then return end
+    current_threat = current_threat or 0
+
+    for _, e in pairs(entities) do
+        if e.valid and (e.type == "container" or e.type == "logistic-container") then
+            for _, item in ipairs(RUINS_LOOT_POOL) do
+                -- Проверка: порог угрозы пройден ИЛИ порог не задан
+                local threat_ok = not item.min_threat or (current_threat >= item.min_threat)
+                
+                if threat_ok and math.random() <= item.chance then
+                    local count = math.random(item.min, item.max)
+                    e.insert({name = item.name, count = count})
+                    if is_debug_enabled() then
+                        debug("Inserted loot '" .. tostring(item.name) .. "' x" .. tostring(count) .. " (min_threat=" .. tostring(item.min_threat) .. ") for current_threat=" .. string.format("%.3f", current_threat))
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function in_list(list, val)
+    for _, v in ipairs(list) do
+        if v == val then return true end
+    end
+    return false
+end
+
+local function pirate_load_turrets(entities)
+    if not entities or #entities == 0 then return end
+    
+    local gun_ammo = "piercing-rounds-magazine"
+    if prototypes.item["armor-piercing-rifle-magazine"] then gun_ammo = "armor-piercing-rifle-magazine" end
+    
+    for _, e in pairs(entities) do
+        if e.valid then
+            if e.name == 'gun-turret' then 
+                e.insert({name = gun_ammo, count = 20}) 
+            elseif e.name == 'wdm_pirate_rocket-turret' then 
+                e.insert({name = "rocket", count = 10}) 	
+            elseif e.name == 'wdm_pirate_railgun-turret' then 
+                e.insert({name = "railgun-ammo", count = 5}) 
+            end
+        end
+    end
+end
+
+-- Создание стака чертежа
+local function make_ruins_blueprint_stack(blueprint_string)
+    if not (game and type(blueprint_string) == "string" and blueprint_string ~= "") then return nil end
+
+    local ok_inv, inv = pcall(function()
+        return game.create_inventory(1)
+    end)
+    if not (ok_inv and inv and inv.valid) then return nil end
+
+    local stack = inv[1]
+    if not (stack and stack.valid) then return nil end
+
+    stack.set_stack({ name = "blueprint", count = 1 })
+    
+    local import_result = nil
+    pcall(function()
+        import_result = stack.import_stack(blueprint_string)
+    end)
+    
+    if import_result == 1 or not (stack.valid_for_read and stack.is_blueprint_setup()) then 
+        inv.destroy()
+        return nil 
+    end
+
+    return stack, inv
+end
+
+local function get_blueprint_bounding_box(stack)
+    if not (stack and stack.valid_for_read and stack.is_blueprint_setup()) then return nil end
+
+    local entities = stack.get_blueprint_entities()
+    if not entities or #entities == 0 then return nil end
+
+    local min_x, min_y = math.huge, math.huge
+    local max_x, max_y = -math.huge, -math.huge
+
+    for _, e in ipairs(entities) do
+        local proto = prototypes.entity[e.name]
+        local box = proto and proto.collision_box or {left_top={x=-0.5, y=-0.5}, right_bottom={x=0.5, y=0.5}}
+        
+        local left = e.position.x + box.left_top.x
+        local top = e.position.y + box.left_top.y
+        local right = e.position.x + box.right_bottom.x
+        local bottom = e.position.y + box.right_bottom.y
+
+        if left < min_x then min_x = left end
+        if top < min_y then min_y = top end
+        if right > max_x then max_x = right end
+        if bottom > max_y then max_y = bottom end
+    end
+
+    return {
+        left_top = {x = min_x, y = min_y},
+        right_bottom = {x = max_x, y = max_y}
+    }
+end
+
+local function is_area_clear_of_water(surface, box, center_pos)
+    local offset_x = math.abs(box.right_bottom.x - box.left_top.x) * 0.25
+    local offset_y = math.abs(box.right_bottom.y - box.left_top.y) * 0.25
+
+    local points = {
+        {x = center_pos.x, y = center_pos.y},
+        {x = center_pos.x - offset_x, y = center_pos.y - offset_y},
+        {x = center_pos.x + offset_x, y = center_pos.y + offset_y}
+    }
+
+    for i = 1, #points do
+        local p = points[i]
+        local tile = surface.get_tile(p.x, p.y)
+        if tile and tile.valid then
+            local tile_proto = tile.prototype
+            local mask = tile_proto and tile_proto.collision_mask
+            if mask and mask.layers then
+                if mask.layers["water"] then
+                    return false
+                end
+            end
+        end
+    end
+
+    return true
+end
+
+local function find_clear_space_for_blueprint(surface, bp_box, start_center, max_radius)
+    local start_x = math.floor(start_center.x) + 0.5
+    local start_y = math.floor(start_center.y) + 0.5
+
+    if is_area_clear_of_water(surface, bp_box, {x = start_x, y = start_y}) then
+        return {x = start_x, y = start_y}
+    end
+
+    local step = 8
+    local x = 0
+    local y = 0
+    local dx = 0
+    local dy = -1
+
+    local max_steps = math.ceil(max_radius / step)
+    local total_iterations = (max_steps * 2 + 1) * (max_steps * 2 + 1)
+
+    for i = 1, total_iterations do
+        if (x == y) or (x < 0 and x == -y) or (x > 0 and x == 1 - y) then
+            local temp = dx
+            dx = -dy
+            dy = temp
+        end
+
+        x = x + dx
+        y = y + dy
+
+        local candidate_pos = {
+            x = start_x + (x * step),
+            y = start_y + (y * step)
+        }
+
+        local dist_x = math.abs(x * step)
+        local dist_y = math.abs(y * step)
+        local max_dist = dist_x > dist_y and dist_x or dist_y
+
+        if max_dist <= max_radius then
+            if is_area_clear_of_water(surface, bp_box, candidate_pos) then
+                return candidate_pos
+            end
+        end
+    end
+
+    return start_center
+end
+
+local function spawn_ruins_blueprint(surface, area, blueprint_string, opts)
+    if not (surface and surface.valid and area and blueprint_string) then return false end
+
+    opts = opts or {}
+    local stack, inv = make_ruins_blueprint_stack(blueprint_string)
+    if not stack then return false end
+    
+    local threat_force = nil
+    if opts.force then
+        threat_force = opts.force
+    elseif opts.ship and opts.ship.force then
+        if type(opts.ship.force) == "table" then
+            threat_force = opts.ship.force
+        elseif type(opts.ship.force) == "string" and game and game.forces then
+            threat_force = game.forces[opts.ship.force]
+        end
+    end
+    if not (threat_force and threat_force.valid) then
+        threat_force = game and game.forces and (game.forces.player or game.forces["player"]) or nil
+    end
+    
+    local threat_data = get_threat_level(surface, threat_force, {
+        tech_weight = tonumber(opts.tech_influence) or 1,
+        tech_tiers = opts.tech_tiers
+    })
+    local current_threat = threat_data.threat or 0
+
+    local build_force = (game and game.forces and (game.forces.neutral or game.forces["neutral"]))
+        or threat_force
+        or (game and game.forces and (game.forces.player or game.forces["player"]))
+
+    local center = {
+        x = ((area.left_top.x or 0) + (area.right_bottom.x or 32)) / 2,
+        y = ((area.left_top.y or 0) + (area.right_bottom.y or 32)) / 2
+    }
+    
+    local candidate = center
+    local bp_box = get_blueprint_bounding_box(stack)
+    
+    if bp_box then
+        local bp_w = math.abs(bp_box.right_bottom.x - bp_box.left_top.x)
+        local bp_h = math.abs(bp_box.right_bottom.y - bp_box.left_top.y)
+        local max_side = bp_w > bp_h and bp_w or bp_h
+        local search_radius = math.max(32, math.ceil(max_side / 2) + 48)
+--        surface.request_to_generate_chunks(center, math.ceil(search_radius / 32))
+        candidate = find_clear_space_for_blueprint(surface, bp_box, center, search_radius)
+    end
+
+    -- Размещение призраков чертежа на карте
+    local ok, built = pcall(function()
+        return stack.build_blueprint{
+            surface = surface,
+            force = build_force,
+            position = candidate,
+            force_build = true,
+            build_mode = defines.build_mode.super_forced, 
+            skip_fog_of_war = false,
+            raise_built = false
+        }
+    end)
+
+    local built_count = 0
+    if ok and type(built) == "table" then
+        local revived_entities = {}
+        for _, ghost in pairs(built) do
+            if ghost and ghost.valid then
+                local _, revived = ghost.revive({ raise_built = false })
+                if revived and revived.valid then
+                    if revived.name == "gun-turret" or revived.name == "wdm_pirate_railgun-turret" or revived.name == "wdm_pirate_laser-turret" then
+                        if game and game.forces and game.forces.enemy then
+                            revived.force = game.forces.enemy
+                        end
+                    end
+                    revived_entities[#revived_entities + 1] = revived
+                    built_count = built_count + 1
+                end
+            end
+        end
+        if built_count > 0 then
+            pirate_load_turrets(revived_entities)
+            fill_ruins_loot(revived_entities, current_threat)
+
+            local force_name = (threat_force and threat_force.name) or "neutral"
+            debug("Ruins spawned for " .. force_name .. ". Loot Threat: " .. string.format("%.2f", current_threat))
+        end
+    end
+
+    if inv and inv.valid then
+        pcall(function() inv.destroy() end)
+    end
+
+    return ok and built_count > 0
+end
+
 local function consume_crystal_destroy_registration_by_key(key)
     if not (storage and storage.crystal_destroy_registrations and key) then return nil end
     local registrations = storage.crystal_destroy_registrations
@@ -963,59 +1420,6 @@ local function register_wdm_planet_events()
     return true
 end
 
--- ============================================================
--- THREAT LEVEL: evolution + tech
--- ============================================================
-
-local function get_threat_level(surface, force, opts)
-    opts = opts or {}
-    local tiers = opts.tech_tiers or DEFAULT_TECH_TIERS
-
-    -- EVO
-    local evo = 0
-    local enemy = game.forces and game.forces["enemy"]
-    if enemy then
-        if enemy.get_evolution_factor then
-            local ok, val = pcall(function() return enemy.get_evolution_factor(surface) end)
-            if ok and type(val) == "number" then evo = val end
-        elseif enemy.evolution_factor then
-            local ok, val = pcall(function() return enemy.evolution_factor end)
-            if ok and type(val) == "number" then evo = val end
-        end
-    end
-    evo = math.max(0, math.min(1, evo))
-
-    -- TECH
-    local tiers_total = #tiers
-    local tiers_completed = 0
-    if force and force.valid then
-        for _, tier_opts in ipairs(tiers) do
-            local done = false
-            for _, pack_name in ipairs(tier_opts) do
-                local ok, rec = pcall(function() return force.recipes and force.recipes[pack_name] end)
-                if ok and rec and rec.valid then
-                    if rec.enabled == true then
-                        done = true
-                        break
-                    end
-                end
-            end
-            if done then tiers_completed = tiers_completed + 1 end
-        end
-    end
-    local tech = (tiers_total > 0) and (tiers_completed / tiers_total) or 0
-    tech = math.max(0, math.min(1, tech))
-
-    -- combine
-    local tech_weight = tonumber(opts.tech_weight) or 0.5
-    tech_weight = math.max(0, math.min(1, tech_weight))
-
-    local threat = evo * (1 - tech_weight) + tech * tech_weight
-    threat = math.max(0, math.min(1, threat))
-
-    return { evo = evo, tech = tech, threat = threat }
-end
-
 -- Возвращает уровень технологии размера палубы (0..8) для силы
 local function get_ship_floor_size_tech_level(force)
     if not (force and force.valid and force.technologies) then return 0 end
@@ -1085,6 +1489,167 @@ local function find_spawn_position_near_ship(ship, surface, min_dist, max_dist, 
 
     return nil
 end
+
+-- Helper: Send unit to a specific location (adapted for WDM conditions)
+local function unit_go_to_location(unit, destination, surface, distraction, stay)
+    if not (unit and unit.valid and destination) then return end
+    
+    distraction = distraction or defines.distraction.by_enemy
+    local cmd_unit = unit
+    
+    -- Get commandable interface if available
+    if unit.object_name == "LuaEntity" and unit.commandable then
+        cmd_unit = unit.commandable
+    end
+    
+    if not cmd_unit then return end
+    
+    local command = {
+        type = defines.command.go_to_location,
+        destination = destination,
+        pathfind_flags = {
+            use_cache = true,
+            low_priority = false,
+            allow_destroy_friendly_entities = false
+        },
+        distraction = distraction
+    }
+    
+    if stay then
+        -- Add loitering when arriving at destination
+        command.radius = 15
+    end
+    
+    pcall(function()
+        cmd_unit.set_command(command)
+    end)
+end
+
+local function find_boss_edge_spawn_position(surface, ship, force, edge_distance)
+    if not (surface and surface.valid) then return nil end
+    if not (ship and ship.position) then return nil end
+    
+    edge_distance = edge_distance or 150
+    local ship_pos = ship.position
+    local station_pos = ship.active_space_station and ship.active_space_station.position
+    local min_station_distance = 90
+    
+    -- Метод 1: Ищем НАСТОЯЩУЮ границу исследованных чанков
+    local num_rays = 24
+    local edge_candidates = {}
+    
+    for ray_idx = 0, num_rays - 1 do
+        local angle = (ray_idx / num_rays) * 2 * math.pi
+        local dir_x = math.cos(angle)
+        local dir_y = math.sin(angle)
+        
+        -- Увеличиваем макс. радиус до 40 чанков (~1280 тайлов) на случай огромных баз
+        local max_step = 40 
+        local edge_step = nil
+        
+        for step = 1, max_step do
+            -- Шагаем строго по чанкам наружу от корабля
+            local test_x = ship_pos.x + dir_x * step * 32
+            local test_y = ship_pos.y + dir_y * step * 32
+            
+            local chunk_x = math.floor(test_x / 32)
+            local chunk_y = math.floor(test_y / 32)
+            
+            local ok, is_generated = pcall(function()
+                -- В Factorio API передается таблица координат чанка
+                return surface.is_chunk_generated({chunk_x, chunk_y})
+            end)
+            
+            -- Нам нужен ПЕРВЫЙ чанк, который НЕ сгенерирован (это начало тумана войны)
+            if ok and not is_generated then
+                -- Чтобы босс не спавнился слишком близко к кораблю (минимум 3 чанка / 96 тайлов)
+                if step >= 3 then
+                    edge_step = step
+                end
+                break
+            end
+            
+            if not ok then break end
+        end
+        
+        if edge_step then
+            local edge_pos = {
+                x = ship_pos.x + dir_x * (edge_step - 1) * 32,
+                y = ship_pos.y + dir_y * (edge_step - 1) * 32,
+                ray = ray_idx
+            }
+            table.insert(edge_candidates, edge_pos)
+        end
+    end
+    
+    -- Если нашли реальные края карты
+    if #edge_candidates > 0 then
+        -- Для разнообразия выбираем случайный сектор края
+        local chosen_edge = edge_candidates[math.random(#edge_candidates)]
+        
+        local attempts = 0
+        while attempts < 40 do
+            attempts = attempts + 1
+            
+            -- Изменено: закидываем босса НАУРУЖУ (вглубь тумана), а не возвращаем к кораблю!
+            local offset_into_fog = math.random(20, 50) 
+            local spread_angle = math.random() * math.pi / 6 - math.pi / 12  -- ±15 градусов
+            
+            local angle_from_edge = (chosen_edge.ray / num_rays) * 2 * math.pi + spread_angle
+            
+            local candidate = {
+                x = chosen_edge.x + math.cos(angle_from_edge) * offset_into_fog,
+                y = chosen_edge.y + math.sin(angle_from_edge) * offset_into_fog
+            }
+            
+            local valid = true
+            if not is_non_water_tile(surface, candidate) then valid = false end
+            
+            if valid and station_pos then
+                local dist = math.sqrt((candidate.x - station_pos.x)^2 + (candidate.y - station_pos.y)^2)
+                if dist < min_station_distance then valid = false end
+            end
+            
+            if valid then
+                debug("has_boss_2: Successfully found edge spawn at ray " .. tostring(chosen_edge.ray))
+                return candidate
+            end
+        end
+    end
+    
+    -- Метод 2: НАДЁЖНЫЙ FALLBACK (если база гигантская или края не подошли)
+    -- Спавним строго НА УДАЛЕНИИ от корабля, чтобы не сломать базу
+    local fallback_attempts = 0
+    while fallback_attempts < 30 do
+        fallback_attempts = fallback_attempts + 1
+        local angle = math.random() * 2 * math.pi
+        -- Если у игрока огромная база, спавним босса дальше (минимум 250 тайлов)
+        local distance = math.max(edge_distance, 250) + math.random(-30, 30)
+        
+        local candidate = {
+            x = ship_pos.x + math.cos(angle) * distance,
+            y = ship_pos.y + math.sin(angle) * distance
+        }
+        
+        local valid = true
+        if not is_non_water_tile(surface, candidate) then valid = false end
+        
+        if valid and station_pos then
+            local dist_from_station = math.sqrt((candidate.x - station_pos.x)^2 + (candidate.y - station_pos.y)^2)
+            if dist_from_station < min_station_distance then valid = false end
+        end
+        
+        if valid then
+            debug("has_boss_2: Fallback spawn used at safe distance: " .. string.format("%.1f", distance))
+            return candidate
+        end
+    end
+    
+    return nil
+end
+
+
+
 
 -- ============================================================
 -- СПАВН СУЩНОСТЕЙ (helper)
@@ -1241,6 +1806,7 @@ end
 local ACTIONS = {}
 
 -- forward declaration so ACTIONS can call teleport helper
+local sync_chunk_generated_handler
 local teleport_player_to_available_deck
 local find_safe_teleport_position
 local spawn_crystals
@@ -1342,6 +1908,28 @@ local function handle_custom_planet_event(event_name, ship, surface)
         return
     end
 
+    -- Для has_boss_2 добавляем задержку
+    if event_name == "has_boss_2" then
+        local min_seconds = ev.wdm_min_delay or 30
+        local max_seconds = ev.wdm_max_delay or 120
+        local seconds = math.random(min_seconds, max_seconds)
+        local delay_ticks = seconds * 60
+        
+        -- Show detected message at half time before spawn
+        local message_delay_ticks = math.floor(delay_ticks / 2)
+        debug("has_boss_2 will be scheduled after " .. tostring(seconds) .. " seconds (" .. tostring(delay_ticks) .. " ticks), message at " .. tostring(message_delay_ticks) .. " ticks")
+
+        meta = {
+            tech_influence = ev.tech_influence,
+            tech_tiers = ev.tech_tiers,
+            detected_message_tick = game.tick + message_delay_ticks
+        }
+
+        mark_surface_event_triggered(surface, ship, event_name)
+        schedule_event_for_tick(event_name, ship_stub, surface, delay_ticks, meta)
+        return
+    end
+
     -- Для других событий (earthquake) выполняем сразу
     local ok, err = pcall(action, surface, ev, ship_stub, meta)
     if not ok then
@@ -1414,6 +2002,33 @@ ACTIONS.spawn_laser_boss_far = function(surface, ev, ship_stub, meta)
         end
     end
 end
+
+ACTIONS.ruins = function(surface, ev, ship_stub, meta)
+    if not (surface and surface.valid) then return end
+
+    -- Инициализация состояния ruins
+    storage.ruins_active_surfaces = storage.ruins_active_surfaces or {}
+    storage.ruins_active_surfaces[surface.index] = true
+
+    -- Сохраняем силу для расчета угрозы при генерации чанков
+    storage.ruins_trigger_force_by_surface = storage.ruins_trigger_force_by_surface or {}
+    local force_name = nil
+    if ship_stub and ship_stub.force then
+        if type(ship_stub.force) == "string" then
+            force_name = ship_stub.force
+        else
+            force_name = ship_stub.force.name
+        end
+    end
+    storage.ruins_trigger_force_by_surface[surface.index] = force_name
+
+    -- Включаем обработчик генерации чанков для спавна руин
+    sync_chunk_generated_handler()
+
+    game.print({ "wdm-expansion.ruins_discovered", surface.name })
+    debug("Ruins event activated on surface " .. tostring(surface.name) .. ". Triggering force: " .. tostring(force_name))
+end
+
 --[[
 ACTIONS.spawn_pirate_base = function(surface, ev, ship_stub)
     spawn_pirate_base(ship_stub, surface)
@@ -1894,6 +2509,137 @@ ACTIONS.bright_day = function(surface, ev, ship_stub, meta)
     debug("bright_day started on surface " .. tostring(surface.name) .. ", solar=" .. tostring(solar_mult) .. " daytime=" .. tostring(daytime))
 end
 
+-- Вспомогательная функция: получить валидный прототип босса
+local function get_valid_boss_prototype(tier)
+    tier = math.max(1, math.min(10, tier))
+    
+    local mcu_name = "mind-control-unit-" .. tostring(tier)
+    local has_mcu = prototypes.entity[mcu_name] ~= nil
+    
+    local zombie_name = "maf-boss-zombie-" .. tostring(tier)
+    local has_zombie = HAS_ZOMBIE_HORDE and prototypes.entity[zombie_name] ~= nil
+    if has_mcu and has_zombie then
+        if math.random(1, 100) <= 60 then
+            return mcu_name
+        else
+            return zombie_name
+        end
+    end
+    if has_mcu then return mcu_name end
+    if has_zombie then return zombie_name end
+    
+    return nil
+end
+
+
+-- ACTION: spawn_boss_at_world_edge - spawns a boss at the edge of discovered world
+ACTIONS.spawn_boss_at_world_edge = function(surface, ev, ship_stub, meta)
+    if not (surface and surface.valid) then return end
+    
+    local base_count = ev.spawn_count or 1
+    local force = nil
+    if ship_stub and ship_stub.force and type(ship_stub.force) == "table" then
+        force = ship_stub.force
+    elseif ship_stub and ship_stub.force and type(ship_stub.force) == "string" then
+        force = game.forces[ship_stub.force]
+    end
+    if not (force and force.valid) then force = game.forces["player"] end
+    
+    -- Расчет уровня угрозы для выбора босса
+    local t = get_threat_level(surface, force, {
+        tech_weight = ev.tech_influence or 0.55,
+        tech_tiers = ev.tech_tiers
+    })
+    
+    local tier = math.floor(t.threat * 9) + 1
+    tier = math.max(1, math.min(10, tier))
+    
+    -- Получить валидный прототип босса
+    local prototype_name = get_valid_boss_prototype(tier)
+    if not prototype_name or not prototypes.entity[prototype_name] then
+        debug("has_boss_2: ERROR - no valid boss prototype for tier " .. tostring(tier))
+        return
+    end
+    
+    -- Найти позицию спавна на краю мира
+    local spawn_pos = find_boss_edge_spawn_position(surface, ship_stub, force, ev.edge_distance_from_ship or 150)
+    if not spawn_pos then
+        debug("has_boss_2: Could not find valid spawn position at world edge on surface " .. tostring(surface.name))
+        return
+    end
+    
+    -- Спавн босс-юнитов на краю
+    local spawned_units = {}
+    
+    for i = 1, base_count do
+        -- Небольшой разброс позиции
+        local spawn_angle = (i - 1) / base_count * 2 * math.pi + (math.random() * 0.3)
+        local spawn_distance = 15 + math.random(20)
+        
+        local unit_pos = {
+            x = spawn_pos.x + spawn_distance * math.cos(spawn_angle),
+            y = spawn_pos.y + spawn_distance * math.sin(spawn_angle)
+        }
+        
+        -- Найти неколлизионную позицию для юнита
+        local safe_pos = unit_pos
+        if surface.find_non_colliding_position then
+            -- Параметры: (name, center, radius, precision, force_to_ignore)
+            local found_safe = surface.find_non_colliding_position(prototype_name, unit_pos, 16, 0.5, nil)
+            if found_safe then
+                safe_pos = found_safe
+            end
+        end
+        
+        -- Проверка что позиция валидна
+        if not is_non_water_tile(surface, safe_pos) then
+            debug("has_boss_2: Skipped spawn at water tile [" .. string.format("%.1f,%.1f", safe_pos.x, safe_pos.y) .. "]")
+            goto continue_spawn
+        end
+        
+        -- Спавн босс-юнита
+        local ok, boss = pcall(function()
+            return surface.create_entity({
+                name = prototype_name,
+                position = safe_pos,
+                force = game.forces.enemy,
+                create_build_effect_smoke = false
+            })
+        end)
+        
+        if ok and boss and boss.valid then
+            table.insert(spawned_units, boss)
+            
+            -- Спавн визуального эффекта
+            pcall(function()
+                surface.create_entity({ name = "explosion", position = boss.position })
+            end)
+            
+            debug("has_boss_2: Spawned boss " .. tostring(prototype_name) .. " at [" .. string.format("%.1f,%.1f", safe_pos.x, safe_pos.y) .. "]")
+        else
+            debug("has_boss_2: Failed to create boss entity of type " .. tostring(prototype_name) .. " at [" .. string.format("%.1f,%.1f", safe_pos.x, safe_pos.y) .. "]")
+        end
+        
+        ::continue_spawn::
+    end
+    
+    -- Отправить спавненных юнитов к кораблю
+    local ship_pos = ship_stub and ship_stub.position or { x = 0, y = 0 }
+    for _, unit in ipairs(spawned_units) do
+        if unit and unit.valid then
+            -- Использовать правильный тип дистракции для враждебных юнитов
+            unit_go_to_location(unit, ship_pos, surface, defines.distraction.by_anything_with_health, false)
+        end
+    end
+    
+    if #spawned_units > 0 then
+--        game.print({ "wdm-expansion.has_boss_2_spawned", spawn_pos.x, spawn_pos.y })
+        debug("has_boss_2: Successfully spawned " .. tostring(#spawned_units) .. " boss unit(s) of type '" .. tostring(prototype_name) .. "' on surface " .. tostring(surface.name) .. " tier=" .. tostring(tier) .. " evo=" .. string.format("%.3f", t.evo) .. " threat=" .. string.format("%.3f", t.threat))
+    else
+        debug("has_boss_2: No units were successfully spawned on surface " .. tostring(surface.name))
+    end
+end
+
 -- ============================================================
 -- EARTHQUAKE HELPERS
 -- ============================================================
@@ -2283,6 +3029,14 @@ local function process_scheduled_events()
     local remaining = {}
     
     for _, job in ipairs(storage.scheduled_events) do
+        -- Check for has_boss_2 detection message (at half time)
+        if job.name == "has_boss_2" and job.meta and job.meta.detected_message_tick and not job.meta.message_shown then
+            if game.tick >= job.meta.detected_message_tick then
+                game.print({ "wdm-expansion.has_boss_2_detected" })
+                job.meta.message_shown = true
+            end
+        end
+        
         if job.tick <= now then
             local ev = storage.events and storage.events[job.name]
             if ev then
@@ -2386,6 +3140,73 @@ local function on_player_changed_surface(event)
         end
     end
 end
+
+
+local function on_chunk_generated(event)
+    if not is_mod_enabled() then return end
+    if not event or not event.surface or not event.surface.valid then return end
+
+    local surface = event.surface
+    local surface_index = surface.index
+    local ev = storage.events and storage.events.ruins or DEFAULT_EVENTS.ruins
+    if not ev then return end
+
+    storage.ruins_active_surfaces = storage.ruins_active_surfaces or {}
+    if not storage.ruins_active_surfaces[surface_index] then return end
+
+    local chance = tonumber(ev.chunk_spawn_chance) or 0
+    if chance <= 0 or math.random() > chance then return end
+
+    local chunk_position = event.position or event.chunk_position
+    if not chunk_position then return end
+
+    local area = event.area
+    if not area then
+        local left_top = { x = chunk_position.x * 32, y = chunk_position.y * 32 }
+        area = {
+            left_top = left_top,
+            right_bottom = { x = left_top.x + 32, y = left_top.y + 32 }
+        }
+    end
+
+    local pool = ev.blueprint_pool or get_ruins_blueprint_pool()
+    if not (pool and #pool > 0) then return end
+
+    local max_attempts = tonumber(ev.spawn_attempts) or 3
+    for _ = 1, max_attempts do
+        local blueprint_string = pick_ruins_blueprint_from_pool(pool)
+        local trigger_force_name = storage.ruins_trigger_force_by_surface and storage.ruins_trigger_force_by_surface[surface_index]
+        local trigger_force = nil
+        if trigger_force_name and game.forces and game.forces[trigger_force_name] then
+            trigger_force = game.forces[trigger_force_name]
+        end
+        if not trigger_force then
+            for _, p in pairs(game.connected_players) do
+                if p and p.valid and p.surface and p.surface.index == surface_index then
+                    trigger_force = p.force
+                    if trigger_force and trigger_force.valid then
+                        debug("Inferred trigger force '" .. tostring(trigger_force.name) .. "' from player " .. tostring(p.index))
+                        break
+                    end
+                end
+            end
+        end
+        if not (trigger_force and trigger_force.valid) then trigger_force = game.forces["player"] end
+        
+        -- Пытаемся заспавнить руины
+        local ok = spawn_ruins_blueprint(surface, area, blueprint_string, {
+            force = trigger_force,
+            tech_influence = ev.tech_influence,
+            tech_tiers = ev.tech_tiers
+        })
+        
+        if ok then
+            debug("Ruins spawned on surface " .. tostring(surface.name) .. " at chunk X:" .. tostring(chunk_position.x) .. " Y:" .. tostring(chunk_position.y))
+            return
+        end
+    end
+end
+
 
 local function on_player_joined_game(event)
     if not event.player_index then return end
@@ -2565,7 +3386,14 @@ local function on_ship_warping(event)
     if old_biological_bonus > 0 then
         new_biological_bonus = math.max(0, old_biological_bonus - 0.015)
     end
+    -- ОСТАНОВКА ГЕНЕРАЦИИ РУИН
+    if storage and storage.ruins_active_surfaces then
+        storage.ruins_active_surfaces = {} -- Очищаем список поверхностей
+        sync_chunk_generated_handler()      -- Отключаем сам обработчик событий (on_event = nil)
+        debug("Ruins generation stopped due to ship warp")
+    end
 
+    cleanup_triggered_surface_events()
     if new_melee_bonus ~= old_melee_bonus or new_biological_bonus ~= old_biological_bonus then
         storage.enemy_melee_damage_bonus = new_melee_bonus
         storage.enemy_biological_damage_bonus = new_biological_bonus
@@ -2598,6 +3426,10 @@ local function on_ship_warping(event)
         -- also clear any leftover records on all surfaces (quiet no-op if none)
         restore_all_storm_disabled_entities()
         storage.storm_tracked_entities = {}
+    end
+    
+    if event and event.ship and event.ship.force then
+        terminal_drain.on_ship_warped_handler(event.ship.force_name, event.ship.force, event.destination_surface)
     end
 end
 
@@ -2640,6 +3472,22 @@ local function register_wdm_custom_planet_event()
     end
 end
 
+
+local function should_enable_chunk_generated_handler()
+    return is_mod_enabled()
+        and storage
+        and storage.ruins_active_surfaces
+        and next(storage.ruins_active_surfaces) ~= nil
+end
+
+sync_chunk_generated_handler = function()
+    if should_enable_chunk_generated_handler() then
+        script.on_event(defines.events.on_chunk_generated, on_chunk_generated)
+    else
+        script.on_event(defines.events.on_chunk_generated, nil)
+    end
+end
+
 -- Функция для регистрации обработчиков без изменения storage (для on_load)
 local function register_event_handlers()
     -- Обработчик экстренного возврата всегда активен, независимо от состояния мода
@@ -2672,11 +3520,13 @@ local function register_event_handlers()
             local ok, id
             ok, id = pcall(function() return remote.call("WDM", "get_on_custom_planet_event") end)
             if ok and id then script.on_event(id, nil) end
-            ok, id = pcall(function() return remote.call("WDM", "get_on_ship_warping") end)
-            if ok and id then script.on_event(id, nil) end
+--            ok, id = pcall(function() return remote.call("WDM", "get_on_ship_warping") end)
+--            if ok and id then script.on_event(id, nil) end
         end
         debug("WDM Boss Expansion mod DISABLED - event handlers unregistered")
     end
+
+    sync_chunk_generated_handler()
 
     -- Применяем настройку дружественного урона независимо от включенности
     -- основных ивентов мода, т.к. она отвечает только за поведение сил.
@@ -2690,6 +3540,7 @@ local function initialize_mod()
     rebuild_storm_destroy_registrations()
     sync_default_events()
     register_event_handlers()
+    sync_chunk_generated_handler()
     if storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
         ensure_crystal_tick()
     end
@@ -2778,7 +3629,7 @@ end
 local function on_surface_deleted(event)
     if not event then return end
     storage.triggered_surface_events = storage.triggered_surface_events or {}
-
+    storage.ruins_active_surfaces = storage.ruins_active_surfaces or {}
     local si_key = event.surface_index and ("surface-index:" .. tostring(event.surface_index)) or nil
     local s_name_key = event.surface_name and ("surface:" .. tostring(event.surface_name)) or nil
 
@@ -2787,6 +3638,8 @@ local function on_surface_deleted(event)
         if not evs or not next(evs) then
             storage.triggered_surface_events[si_key] = nil
         end
+        storage.ruins_active_surfaces[event.surface_index] = nil
+        sync_chunk_generated_handler()
     end
     if s_name_key then
         local evs = storage.triggered_surface_events[s_name_key]
@@ -2795,6 +3648,7 @@ local function on_surface_deleted(event)
         end
     end
 end
+
 
 -- Обработчик изменения настроек
 local function on_runtime_mod_setting_changed(event)
@@ -2887,11 +3741,12 @@ return {
     on_entity_removed = on_entity_removed,
     on_object_destroyed = on_object_destroyed,
     on_surface_deleted = on_surface_deleted,
+    on_chunk_generated = on_chunk_generated,
+    sync_chunk_generated_handler = sync_chunk_generated_handler,
+    should_enable_chunk_generated_handler = should_enable_chunk_generated_handler,
     reset_crystal_mined_bonuses = reset_crystal_mined_bonuses,
     on_runtime_mod_setting_changed = on_runtime_mod_setting_changed,
     find_safe_teleport_position = function(surface, preferred_pos)
         return find_safe_teleport_position(surface, preferred_pos)
     end
 }
-
-

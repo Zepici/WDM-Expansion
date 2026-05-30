@@ -1,13 +1,13 @@
 return {
     {
         type = "technology",
-        name = "solar-matrix",
-        icon = "__Warp-Drive-Machine-Expansion__/graphics/technology/solar_matrix_tech.png",
+        name = "warponium-solar-panel",
+        icon = "__Warp-Drive-Machine-Expansion__/graphics/technology/warponium-solar-panel_tech.png",
         icon_size = 256,
         effects = {
             {
                 type = "unlock-recipe",
-                recipe = "solar-matrix"
+                recipe = "warponium-solar-panel"
             }
         },
         prerequisites = {"electric-energy-distribution-2", "solar-energy", "wdm_warponium_processing", "wdm_warp_drive_tech-2"},
@@ -20,6 +20,6 @@ return {
             },
             time = 30
         },
-        order = "c-e-a[solar-matrix]"
+        order = "c-e-a[warponium-solar-panel]"
     }
 }

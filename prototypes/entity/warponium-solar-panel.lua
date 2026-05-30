@@ -3,8 +3,8 @@ local hit_effects = require("__base__.prototypes.entity.hit-effects")
 return {
     {
         type = "corpse",
-        name = "solar-matrix-remnants",
-        icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/solar-matrix-icon.png",
+        name = "warponium-solar-panel-remnants",
+        icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/warponium-solar-panel-icon.png",
         icon_size = 64,
         flags = {"placeable-neutral", "building-direction-8-way", "not-on-map"},
         subgroup = "energy-remnants",
@@ -22,7 +22,7 @@ return {
             {
                 layers = {
                     {
-                        filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/solarmatrix/solar-matrix-rem_1.png",
+                        filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/warponium-solar-panel/warponium-solar-panel-rem_1.png",
                         height = 512,
                         width = 512,
                         line_length = 4,
@@ -32,7 +32,7 @@ return {
                         tint = {r = 0.85, g = 0.2, b = 0.6, a = 1}     
                     },
                     {
-                        filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/solarmatrix/solar-matrix-remsh_1.png",
+                        filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/warponium-solar-panel/warponium-solar-panel-remsh_1.png",
                         height = 512,
                         width = 512,
                         line_length = 4,
@@ -47,14 +47,14 @@ return {
     },
     {
         type = "solar-panel",
-        name = "solar-matrix",
-        icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/solar-matrix-icon.png",
+        name = "warponium-solar-panel",
+        icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/warponium-solar-panel-icon.png",
         icon_size = 64,
         flags = {"placeable-neutral", "player-creation"},
-        minable = {mining_time = 0.1, result = "solar-matrix"},
+        minable = {mining_time = 0.1, result = "warponium-solar-panel"},
         fast_replaceable_group = "solar-panel",
         max_health = 400,
-        corpse = "solar-matrix-remnants",
+        corpse = "warponium-solar-panel-remnants",
         dying_explosion = "solar-panel-explosion",
         collision_box = {{-1.9, -1.9}, {1.9, 1.9}},
         selection_box = {{-2, -2}, {2, 2}},
@@ -68,7 +68,7 @@ return {
         picture = {
             layers = {
                 {
-                    filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/solarmatrix/solar_matrix.png",
+                    filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/warponium-solar-panel/warponium-solar-panel.png",
                     priority = "high",
                     render_layer = "object",
                     width = 352,
@@ -78,7 +78,7 @@ return {
                     tint = {r = 0.85, g = 0.2, b = 0.6, a = 1}
                 },
                 {
-                    filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/solarmatrix/solar_matrix_mask.png",
+                    filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/warponium-solar-panel/warponium-solar-panel_mask.png",
                     priority = "high",
                     render_layer = "object",
                     width = 352,
@@ -87,7 +87,7 @@ return {
                     scale = 0.5
                 },
                 {
-                    filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/solarmatrix/solar_matrix_sh.png",
+                    filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/warponium-solar-panel/warponium-solar-panel_sh.png",
                     priority = "high",
                     render_layer = "object",
                     width = 448,

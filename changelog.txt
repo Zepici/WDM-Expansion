@@ -1,21 +1,28 @@
 ---------------------------------------------------------------------------------------------------
 Version: 0.2.0
-Date: 2029-04-16
+Date: 2026-05-30
   Major Features:
     - Multiple reworks and additions to the mechanics of warponium mining, use and processing.
-    - In particular, added: warponium solar panel, conversion plant.
+      - In particular, added: warponium solar panel, conversion plant, warponium hypercube, hydrothermal warp drill, concentrated warponium.
+    - Added new event: Ruins with a set of 13 ruins.
+    - Added new event: "BOSS".
+      - Features the Zombie Boss if enebled mod "ZombieHordeFaction"
+      - Introduces an absolutely new boss: "Psi-Overlord", capable of mind-controlling enemy players and certain vehicles, unleashing absolute chaos especially in multiplayer.
     - Events have received a new formula for calculating the distance from a ship, taking into account its size.
   Features:
     - Added new variations of Exocine Crystals.
-    - Added and fixed factioriopedia simulations for all pirates, bosses and biters.
+    - Added and fixed factioriopedia simulations for all pirates, bosses, biters and ores.
     - Added dynamic passive energy drain system for ship terminals based on warp drive technology level (8 drain levels), consuming power proportional to progression.
   Changes:
     - The event-enable setting is now a startup setting, not a map.
     - More technologies are integrated into the overall technology tree.
   Balancing:
     - Added guaranteed spawn values ​​for some events.
+    - Reduced the chance of an emergency return capsule dropping from bosses.
   Compatibility:
     - Supposedly improved compatibility with Team Competition and other mods that interact with force and allow the creation of multiple teams.
+    - The "Krastorio 2" mod is marked as incompatible due to "Power Armor MK3. Use "Krastorio 2 Spaced Out".
+    - Improved compatibility with the Krastorio 2 Spaced Out mod.
 ---------------------------------------------------------------------------------------------------
 Version: 0.1.30
 Date: 2026-04-16

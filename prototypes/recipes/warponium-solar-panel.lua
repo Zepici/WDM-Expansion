@@ -1,7 +1,7 @@
 return {
     {
         type = "recipe",
-        name = "solar-matrix",
+        name = "warponium-solar-panel",
         energy_required = 15,
         enabled = false,
         ingredients = {
@@ -11,7 +11,7 @@ return {
             {type = "item", name = "warponium-plate", amount = 15}
         },
         results = {
-            {type = "item", name = "solar-matrix", amount = 1}
+            {type = "item", name = "warponium-solar-panel", amount = 1}
         }
     }
 }

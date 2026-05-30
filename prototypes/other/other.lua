@@ -212,3 +212,41 @@ if settings.startup["wdm-expansion-zombie"] and settings.startup["wdm-expansion-
     end
 end
 
+data.raw["resource"]["wdm-ore-warponium"].category = "warponium-solid"
+
+-- Варпониевый гиперкуб
+if mods["space-age"] then
+    table.insert(data.raw.technology["automation-3"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["effect-transmission"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["kovarex-enrichment-process"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["quantum-processor"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["wdm_warp_drive_tech-7"].prerequisites, "ancient-drill") 
+    table.insert(data.raw.recipe["assembling-machine-3"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
+    table.insert(data.raw.recipe["beacon"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
+    table.insert(data.raw.recipe["atomic-bomb"].ingredients, {type = "item", name = "warponium-hypercube", amount = 10})
+
+    table.insert(data.raw.recipe["foundry"].ingredients, {type = "item", name = "warponium-hypercube", amount = 5})
+    table.insert(data.raw.recipe["electromagnetic-plant"].ingredients, {type = "item", name = "warponium-hypercube", amount = 5})
+    table.insert(data.raw.recipe["cryogenic-plant"].ingredients, {type = "item", name = "warponium-hypercube", amount = 5})
+    table.insert(data.raw.recipe["recycler"].ingredients, {type = "item", name = "warponium-hypercube", amount = 5})
+    table.insert(data.raw.recipe["biochamber"].ingredients, {type = "item", name = "warponium-hypercube", amount = 5})
+    table.insert(data.raw.recipe["quantum-processor"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
+else
+    table.insert(data.raw.technology["automation-3"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["effect-transmission"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["kovarex-enrichment-process"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["automation-3"].prerequisites, "ancient-drill")   
+    table.insert(data.raw.recipe["assembling-machine-3"].ingredients, {type = "item", name = "warponium-hypercube", amount = 2})
+    table.insert(data.raw.recipe["beacon"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
+    table.insert(data.raw.recipe["atomic-bomb"].ingredients, {type = "item", name = "warponium-hypercube", amount = 10})
+end
+
+-- K2-SA Compability
+if mods["Krastorio2-spaced-out"] then
+    table.insert(data.raw.technology["kr-energy-control-unit"].prerequisites, "warponium-hypercube")
+    table.insert(data.raw.technology["wdm_warponium_processing"].prerequisites, "steel-processing")
+    table.insert(data.raw.recipe["kr-energy-control-unit"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
+    table.insert(data.raw.recipe["warponium-solar-panel"].ingredients, {type = "item", name = "kr-glass", amount = 30})
+    table.insert(data.raw.recipe["emergency-return"].ingredients, {type = "item", name = "kr-glass", amount = 5})
+    table.insert(data.raw.recipe["crystal-processing-t2"].results, {type = "item", name = "kr-imersium-plate", amount = 25})
+end
