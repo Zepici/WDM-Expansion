@@ -10,6 +10,15 @@ local terminal_drain_by_level = {
     [8] = "15.00MW"
 }
 
+if mods["bobpower"] then
+    for level, drain_str in pairs(terminal_drain_by_level) do
+        local value = tonumber(drain_str:match("[%d%.]+"))
+        if value then
+            terminal_drain_by_level[level] = (value * 2) .. "MW"
+        end
+    end
+end
+
 local function make_terminal_drain_entity(level, drain)
     return {
         type = "electric-energy-interface",

@@ -4,6 +4,7 @@ local PIPE_PREFIX_PATTERN = "linked%-heat%-pipe%-"
 
 -- runtime cache (not persisted)
 local heat_pipe_cache = {} -- [unit_number] = entity
+local reuse_grouped = {}
 local refresh_heat_pipe_tick
 
 local function init_storage()
@@ -65,6 +66,15 @@ local function register_pipe_for_destroy_event(entity)
     end
 end
 
+local function apply_event_filters()
+    local filters = {{filter = "type", type = "heat-pipe"}}
+    script.set_event_filter(defines.events.on_built_entity, filters)
+    script.set_event_filter(defines.events.on_robot_built_entity, filters)
+    script.set_event_filter(defines.events.on_space_platform_built_entity, filters)
+    script.set_event_filter(defines.events.script_raised_built, filters)
+    script.set_event_filter(defines.events.script_raised_revive, filters)
+end
+
 local function remove_pipe_by_unit_number(unit_number)
     if not unit_number then return end
     storage.linked_heat_pipes[unit_number] = nil
@@ -106,7 +116,12 @@ end
 local function sync_linked_heat_pipes()
     if not storage.linked_heat_pipes then return end
 
-    local grouped = {} -- grouped[name] = {entities}
+    for _, list in pairs(reuse_grouped) do
+        local list_size = #list
+        if list_size > 0 then
+            for i = 1, list_size do list[i] = nil end
+        end
+    end
 
     for unit_number, rec in pairs(storage.linked_heat_pipes) do
         local ent = heat_pipe_cache[unit_number]
@@ -116,8 +131,8 @@ local function sync_linked_heat_pipes()
         end
 
         if ent and ent.valid then
-            local list = grouped[rec.name]
-            if not list then list = {}; grouped[rec.name] = list end
+            local list = reuse_grouped[rec.name]
+            if not list then list = {}; reuse_grouped[rec.name] = list end
             list[#list + 1] = ent
         else
             clear_pipe_destroy_registration(unit_number)
@@ -126,11 +141,14 @@ local function sync_linked_heat_pipes()
         end
     end
 
-    for _, pipes in pairs(grouped) do
-        if #pipes > 1 then
+    for _, pipes in pairs(reuse_grouped) do
+        local count = #pipes
+        if count > 1 then
             local total_temp = 0
             local valid_count = 0
-            for _, p in ipairs(pipes) do
+            
+            for i = 1, count do
+                local p = pipes[i]
                 local t = p.temperature
                 if t then
                     total_temp = total_temp + t
@@ -140,13 +158,37 @@ local function sync_linked_heat_pipes()
 
             if valid_count > 0 then
                 local average_temp = total_temp / valid_count
-                for _, p in ipairs(pipes) do
-                    if p.valid and math.abs((p.temperature or 0) - average_temp) > 0.01 then
-                        pcall(function() p.temperature = average_temp end)
+                for i = 1, count do
+                    local p = pipes[i]
+                    if p.valid then
+                        p.temperature = average_temp
                     end
                 end
             end
         end
+    end
+end
+
+local function on_entity_cloned(event)
+    local source = event.source
+    if not (source and source.valid and is_linked_heat_pipe(source.name)) then return end
+    
+    local destination = event.destination
+    if not (destination and destination.valid) then return end
+
+    local old_id = source.unit_number
+    local new_id = destination.unit_number
+    local record = storage.linked_heat_pipes[old_id]
+
+    if record then
+        local dest_pos = destination.position
+        storage.linked_heat_pipes[new_id] = {
+            name = record.name,
+            surface_index = destination.surface.index,
+            position = {x = dest_pos.x, y = dest_pos.y}
+        }
+        heat_pipe_cache[new_id] = destination
+        register_pipe_for_destroy_event(destination)
     end
 end
 
@@ -167,7 +209,7 @@ local function on_pipe_built(event)
     storage.linked_heat_pipes[entity.unit_number] = {
         name = entity.name,
         surface_index = entity.surface.index,
-        position = entity.position
+        position = {x = entity.position.x, y = entity.position.y}
     }
     heat_pipe_cache[entity.unit_number] = entity
     register_pipe_for_destroy_event(entity)
@@ -186,10 +228,12 @@ end
 function heat_pipes.on_init_or_configuration_changed()
     init_storage()
     rebuild_destroy_registrations()
+    apply_event_filters()
     refresh_heat_pipe_tick()
 end
 
 function heat_pipes.on_load()
+    apply_event_filters()
     if storage and storage.linked_heat_pipes and next(storage.linked_heat_pipes) ~= nil then
         script.on_nth_tick(10, sync_linked_heat_pipes)
         return
@@ -214,6 +258,10 @@ function heat_pipes.on_object_destroyed(event)
     local unit_number = registrations.by_registration[event.registration_number] or event.useful_id
     if not unit_number or not storage.linked_heat_pipes[unit_number] then return end
     remove_pipe_by_unit_number(unit_number)
+end
+
+function heat_pipes.on_entity_cloned(event)
+    on_entity_cloned(event)
 end
 
 return heat_pipes

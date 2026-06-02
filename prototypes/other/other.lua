@@ -250,3 +250,9 @@ if mods["Krastorio2-spaced-out"] then
     table.insert(data.raw.recipe["emergency-return"].ingredients, {type = "item", name = "kr-glass", amount = 5})
     table.insert(data.raw.recipe["crystal-processing-t2"].results, {type = "item", name = "kr-imersium-plate", amount = 25})
 end
+
+-- Bob's Power Compability
+if mods["bobpower"] then
+    table.insert(data.raw.technology["warponium-solar-panel"].prerequisites, "bob-solar-energy-3")
+    table.insert(data.raw.recipe["warponium-solar-panel"].ingredients, {type = "item", name = "processing-unit", amount = 8})
+end

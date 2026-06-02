@@ -1,4 +1,15 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.2.1
+Date: 2026-06-02
+  Bugfixes:
+    - Fixed operation of the passive energy drain system in some cases.
+    - Fixed warp heat pipe operation if one of the pipes has a maximum temperature.
+  Compatibility:
+    - Added compatibility with "Bob's Power" mod.
+  Optimizations:
+    - Improved optimization of the passive energy drain system.
+    - Improved optimization of warp heat pipes.
+---------------------------------------------------------------------------------------------------
 Version: 0.2.0
 Date: 2026-05-30
   Major Features:
@@ -22,7 +33,7 @@ Date: 2026-05-30
   Compatibility:
     - Supposedly improved compatibility with Team Competition and other mods that interact with force and allow the creation of multiple teams.
     - The "Krastorio 2" mod is marked as incompatible due to "Power Armor MK3. Use "Krastorio 2 Spaced Out".
-    - Improved compatibility with the Krastorio 2 Spaced Out mod.
+    - Improved compatibility with the "Krastorio 2 Spaced Out" mod.
 ---------------------------------------------------------------------------------------------------
 Version: 0.1.30
 Date: 2026-04-16

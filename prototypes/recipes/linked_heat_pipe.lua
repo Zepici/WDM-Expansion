@@ -1,4 +1,4 @@
-return {
+local recipes = {
     {
         type = "recipe",
         name = "linked-heat-pipe-1",
@@ -39,7 +39,6 @@ return {
             {type = "item", name = "electric-engine-unit", amount = 10},
             {type = "item", name = "advanced-circuit", amount = 15},
             {type = "item", name = "accumulator", amount = 15}
-
         },
         results = {
             {type = "item", name = "linked-heat-pipe-3", amount = 2}
@@ -61,3 +60,11 @@ return {
         }
     }
 }
+
+if mods["bobpower"] then
+    table.insert(recipes[2].ingredients, {type = "item", name = "bob-heat-pipe-2", amount = 5})
+    table.insert(recipes[3].ingredients, {type = "item", name = "bob-heat-pipe-3", amount = 5})
+    table.insert(recipes[4].ingredients, {type = "item", name = "bob-heat-pipe-4", amount = 5})
+end
+
+return recipes

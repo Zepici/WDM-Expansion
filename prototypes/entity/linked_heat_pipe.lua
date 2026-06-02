@@ -1,4 +1,4 @@
-return {
+local pipes = {
     {
         _base = data.raw["heat-pipe"]["heat-pipe"],
         type = "heat-pipe",
@@ -20,7 +20,10 @@ return {
             }
         },
         minable = {mining_time = 0.5, result = "linked-heat-pipe-1"},
-        heating_radius = 0
+        heating_radius = 0,
+        heat_buffer = {
+            max_temperature = 1000
+        }
     },
     {
         _base = data.raw["heat-pipe"]["heat-pipe"],
@@ -45,6 +48,9 @@ return {
         },
         minable = {mining_time = 0.5, result = "linked-heat-pipe-2"},
         heating_radius = 0,
+        heat_buffer = {
+            max_temperature = 1000
+        },
         pictures = {
             single = {
                 layers = {
@@ -89,6 +95,9 @@ return {
         },
         minable = {mining_time = 0.5, result = "linked-heat-pipe-3"},
         heating_radius = 0,
+        heat_buffer = {
+            max_temperature = 1000
+        },
         pictures = {
             single = {
                 layers = {
@@ -133,6 +142,9 @@ return {
         },
         minable = {mining_time = 0.5, result = "linked-heat-pipe-4"},
         heating_radius = 0,
+        heat_buffer = {
+            max_temperature = 1000
+        },
         pictures = {
             single = {
                 layers = {
@@ -155,3 +167,12 @@ return {
         }
     }
 }
+
+if mods["bobpower"] then
+    pipes[1].heat_buffer.max_temperature = 750
+    pipes[2].heat_buffer.max_temperature = 1000
+    pipes[3].heat_buffer.max_temperature = 1250
+    pipes[4].heat_buffer.max_temperature = 1500
+end
+
+return pipes

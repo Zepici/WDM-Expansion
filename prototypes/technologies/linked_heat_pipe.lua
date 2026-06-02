@@ -1,4 +1,4 @@
-return {
+local techs = {
     {
         type = "technology",
         name = "linked-heat-pipe-1",
@@ -141,3 +141,12 @@ return {
         order = "z[heat-pipe]-l[linked-heat-pipe]4"
     }
 }
+
+if mods["bobpower"] then
+    table.insert(techs[1].prerequisites, "bob-heat-pipe-1")
+    table.insert(techs[2].prerequisites, "bob-heat-pipe-2")
+    table.insert(techs[3].prerequisites, "bob-heat-pipe-3")
+    table.insert(techs[4].prerequisites, "bob-heat-pipe-4")
+end
+
+return techs

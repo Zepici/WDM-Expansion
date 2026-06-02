@@ -26,6 +26,10 @@ local function on_entity_built(event)
     safe_call(terminal_drain.on_entity_built, event)
 end
 
+local function on_entity_cloned(event)
+    safe_call(heat_pipes.on_entity_cloned, event)
+end
+
 local function on_entity_removed(event)
     safe_call(heat_pipes.on_entity_removed, event)
     safe_call(planetary_events.on_entity_removed, event)
@@ -68,7 +72,7 @@ local function register_shared_event_handlers()
     script.on_event(defines.events.on_entity_cloned, on_entity_built)
     script.on_event(defines.events.script_raised_built, on_entity_built)
     script.on_event(defines.events.script_raised_revive, on_entity_built)
-
+    script.on_event(defines.events.on_entity_cloned, on_entity_cloned)
     if defines.events.on_space_platform_built_entity then
         script.on_event(defines.events.on_space_platform_built_entity, on_entity_built)
     end

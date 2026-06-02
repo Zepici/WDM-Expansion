@@ -11,6 +11,9 @@ local DRAIN_NAMES = {
     "wdm-terminal-drain-4", "wdm-terminal-drain-5", "wdm-terminal-drain-6", "wdm-terminal-drain-7", "wdm-terminal-drain-8"
 }
 
+local pairs = pairs
+local script = script
+
 local function init_storage()
     storage.terminal_drain_by_force = storage.terminal_drain_by_force or {}
 end
@@ -40,32 +43,30 @@ local function get_max_technology_level(force)
     return max_level
 end
 
-local function destroy_drain_for_force(force_name, destination_surface)
+local function global_wipe_out_drains(force_name)
+    local game_surfaces = game.surfaces
+    for _, surface in pairs(game_surfaces) do
+        if surface.valid then
+            local old_drains = surface.find_entities_filtered({
+                name = DRAIN_NAMES,
+                force = force_name
+            })
+            for j = 1, #old_drains do
+                local old_drain = old_drains[j]
+                if old_drain.valid then 
+                    old_drain.destroy({raise_destroy = false}) 
+                end
+            end
+        end
+    end
+end
+
+local function destroy_drain_for_force_optimized(force_name)
     local force_data = get_or_init_force_data(force_name)
     if force_data.ent and force_data.ent.valid then
         force_data.ent.destroy({raise_destroy = false})
     end
-
-    local surfaces_to_check = {}
-    
-    local old_surface = game.surfaces[force_data.surface_index]
-    if old_surface and old_surface.valid then
-        table.insert(surfaces_to_check, old_surface)
-    end
-    if destination_surface and destination_surface.valid and destination_surface.index ~= force_data.surface_index then
-        table.insert(surfaces_to_check, destination_surface)
-    end
-    for _, surface in pairs(surfaces_to_check) do
-        local old_drains = surface.find_entities_filtered({
-            position = force_data.position,
-            radius = 5.0,
-            name = DRAIN_NAMES,
-            force = force_name
-        })
-        for _, old_drain in pairs(old_drains) do
-            if old_drain.valid then old_drain.destroy({raise_destroy = false}) end
-        end
-    end
+    global_wipe_out_drains(force_name)
 
     force_data.ent = nil
     force_data.registration = nil
@@ -80,16 +81,28 @@ local function get_terminal_info_for_force(force, preferred_surface)
             end
         end
     end
+    
+    for _, surface in pairs(game.surfaces) do
+        if surface.valid and surface ~= preferred_surface then
+            for _, terminal_name in pairs(TERMINAL_NAMES) do
+                local terminals = surface.find_entities_filtered({name = terminal_name, force = force})
+                if terminals and #terminals > 0 then
+                    return terminals[1].position, surface
+                end
+            end
+        end
+    end
     return nil, nil
 end
 
 local function create_drain_for_force(force_name, force, level, target_surface)
-    destroy_drain_for_force(force_name, target_surface)
+    destroy_drain_for_force_optimized(force_name)
 
     local position, surface = get_terminal_info_for_force(force, target_surface)
     if not position or not surface then 
         local force_data = get_or_init_force_data(force_name)
         force_data.level = level
+        force_data.ent = nil
         return 
     end
     
@@ -159,7 +172,6 @@ function terminal_drain.on_object_destroyed(event)
         if force_data.registration == event.registration_number then
             force_data.registration = nil
             force_data.ent = nil
-            force_data.level = 0
             return
         end
     end
@@ -167,11 +179,18 @@ end
 
 function terminal_drain.on_entity_built(event)
     init_storage()
-    local entity = event.entity or event.created_entity or event.destination or event.cloned_entity
+    local entity = event.entity or event.created_entity or event.destination
     if not entity or not entity.valid then return end
     
-    for _, terminal_name in pairs(TERMINAL_NAMES) do
-        if entity.name == terminal_name then
+    for i = 1, #DRAIN_NAMES do
+        if entity.name == DRAIN_NAMES[i] then
+            entity.destroy({raise_destroy = false})
+            return
+        end
+    end
+    
+    for i = 1, #TERMINAL_NAMES do
+        if entity.name == TERMINAL_NAMES[i] then
             local force_data = get_or_init_force_data(entity.force.name)
             
             if force_data.level == -1 then
