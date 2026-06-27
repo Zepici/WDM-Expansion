@@ -1,4 +1,26 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.2.2
+Date: 2026-06-27
+  Major Features:
+    - Added new event: "Gas leak".
+    - Added a new ship ability system (beta).
+      - In particular, added: Ship Abilities Sub-Console, warponium storage tank.
+  Features:
+    - Added Singularity fuel.
+  Balancing:
+    - Exocine crystals now grant an additional pirate faction bonus when mined.
+    - Trying to balance the warponium equipment for Krastorio 2.
+  Bugfixes:
+    - Fixed mod operation with the "quality" mod disabled.
+    - Fixed operation the "wdm-expansion-event-enable" setting.
+  Compatibility:
+    - Added preliminary compatibility with Factorio 2.1 (pending updates for dependency mods).
+    - Mod "Power Armor MK3" marked as incompatible - its content is now included directly in the mod.
+    - Added compatibility with "Krastorio 2" mod.
+    - Added compatibility with "Krastorio 2 Spaced Out" mod.    
+  Graphics:
+    - Added special graphics for Warp heat pipe.
+---------------------------------------------------------------------------------------------------
 Version: 0.2.1
 Date: 2026-06-02
   Bugfixes:
@@ -15,7 +37,7 @@ Date: 2026-05-30
   Major Features:
     - Multiple reworks and additions to the mechanics of warponium mining, use and processing.
       - In particular, added: warponium solar panel, conversion plant, warponium hypercube, hydrothermal warp drill, concentrated warponium.
-    - Added new event: Ruins with a set of 13 ruins.
+    - Added new event: "Ruins" with a set of 13 ruins.
     - Added new event: "BOSS".
       - Features the Zombie Boss if enebled mod "ZombieHordeFaction"
       - Introduces an absolutely new boss: "Psi-Overlord", capable of mind-controlling enemy players and certain vehicles, unleashing absolute chaos especially in multiplayer.

@@ -173,8 +173,40 @@ local DEFAULT_EVENTS = {
         spawn_attempts = 2,
         blueprint_pool = RUINS_BLUEPRINT_POOL,
         tech_influence = 0.4
+    },
+    gas_leak = {
+        -- WDM planet event parameters
+        wdm_chance = 1,
+        wdm_min_wap = 0,
+        wdm_min_tech_progress = 0,
+        wdm_no_repeat = true,
+        wdm_requires_enemies = false,
+        wdm_can_be_removed = true,
+        wdm_difficulty_add = 0.01,
+        wdm_alarm = true,
+        -- Internal config
+        action_name = "gas_leak",
+        initial_clouds_per_floor = 3,
+        cloud_growth_interval_seconds = 30,
+        cloud_growth_count = 2,
+        repair_items_count = 4,
+        item_pool = {
+            {name = "electronic-circuit", count_min = 30, count_max = 120},
+            {name = "iron-plate", count_min = 120, count_max = 480},
+            {name = "copper-plate", count_min = 110, count_max = 440},
+            {name = "steel-plate", count_min = 30, count_max = 120},
+            {name = "pipe", count_min = 25, count_max = 100},
+            {name = "copper-cable", count_min = 50, count_max = 200},
+            {name = "stone-brick", count_min = 30, count_max = 120},
+            {name = "plastic-bar", count_min = 40, count_max = 160}
+        }
     }
 }
+
+if has_active_mod("Krastorio2-spaced-out") or has_active_mod("Krastorio2") then
+    table.insert(DEFAULT_EVENTS.gas_leak.item_pool, {name = "kr-glass", count_min = 20, count_max = 80})
+    table.insert(DEFAULT_EVENTS.gas_leak.item_pool, {name = "kr-electronic-components", count_min = 120, count_max = 240})
+end
 
 if has_active_mod("magnetic-storm") then
     DEFAULT_EVENTS.electromagnetic_storm = {
@@ -186,7 +218,7 @@ if has_active_mod("magnetic-storm") then
         wdm_no_repeat = true,
         wdm_requires_enemies = false,
         wdm_can_be_removed = false,
-        wdm_difficulty_add = 0.05,
+        wdm_difficulty_add = 0.015,
         wdm_alarm = true,
         -- Internal config
         action_name = "electromagnetic_storm",
@@ -202,10 +234,12 @@ end
 -- ============================================================
 
 local function is_mod_enabled()
-    if not settings.global then return true end
-    local setting = settings.global["wdm-expansion-event-enable"]
-    if setting then return setting.value end
-    return true
+    if not settings.startup then return true end
+    local setting = settings.startup["wdm-expansion-event-enable"]
+    if setting ~= nil then 
+        return setting.value 
+    end
+    return true 
 end
 
 local function is_debug_enabled()
@@ -733,6 +767,8 @@ local function init_event_storage()
     }
     storage.enemy_melee_damage_bonus = storage.enemy_melee_damage_bonus or 0
     storage.enemy_biological_damage_bonus = storage.enemy_biological_damage_bonus or 0
+    storage.pirate_humanoid_damage_bonus = storage.pirate_humanoid_damage_bonus or 0
+    storage.gas_leak_active = storage.gas_leak_active or {} -- [surface_index] = {active=true, clouds_count=0, growth_tick=0, repair_bounty=nil}
 end
 
 local function is_surface_event_repeat_persistent(event_name)
@@ -1044,7 +1080,7 @@ local RUINS_LOOT_POOL = {
     {name = "advanced-circuit", min = 2, max = 10, chance = 0.3, min_threat = 0.7},
     {name = "processing-unit", min = 1, max = 10, chance = 0.1, min_threat = 0.7},
 
-    {name = "spidertrom", min = 1, max = 1, chance = 0.025, min_threat = 0.8},
+    {name = "spidertron", min = 1, max = 1, chance = 0.025, min_threat = 0.8},
     {name = "green-refined-concrete", min = 10, max = 50, chance = 0.025, min_threat = 0.7}
 }
 
@@ -1339,7 +1375,7 @@ local function consume_crystal_destroy_registration_for_entity(entity)
 end
 
 -- ============================================================
--- DRUZHESTVENNYI URON (FRIENDLY FIRE) ДЛЯ СИЛ
+-- Дружественный урон (FRIENDLY FIRE) ДЛЯ СИЛ
 -- ============================================================
 
 local FRIENDLY_FIRE_FORCES = { "enemy", "pirate" }
@@ -1431,6 +1467,94 @@ local function get_ship_floor_size_tech_level(force)
         end
     end
     return 0
+end
+
+-- EXTRA RADIUS BY TECH
+-- Определяет номер группы уровня (floor_number) для поверхности:
+--   поверхность (не ship_interior)          → floor 1
+--   ship_interior_<N>_<force_name> для N=1  → floor 2
+--   ship_interior_<N>_<force_name> для N=2  → floor 3
+--   ship_interior_<N>_<force_name> для N=3  → floor 4
+--   ship_interior_<N>_<force_name> для N>=4 → floor N+1
+--   ship_interior_h_<force_name>            → floor 1
+local function get_surface_floor_number(surface)
+    if not (surface and surface.valid and surface.name) then return 1 end
+    local name = surface.name
+    local prefix = "ship_interior_"
+    -- Если имя не начинается с ship_interior_ - это поверхность планеты
+    if string.sub(name, 1, #prefix) ~= prefix then
+        return 1
+    end
+    -- Извлекаем deck_id: ship_interior_<deck_id>_<force_name>
+    local rest = string.sub(name, #prefix + 1)
+    local underscore_pos = string.find(rest, "_")
+    if not underscore_pos then return 1 end
+    local deck_id = string.sub(rest, 1, underscore_pos - 1)
+    -- "h"приравниваем к floor 1
+    if deck_id == "h" then return 1 end
+    local id = tonumber(deck_id)
+    if not id then return 1 end
+    return id + 1
+end
+
+-- Первое значение - базовый радиус (0-й уровень технологии),
+-- последующие - для уровней технологии 1, 2, ... до max_level.
+-- tech_prefix - префикс технологии размера палубы для определения уровня.
+local GAS_LEAK_RADIUS_BY_FLOOR = {
+    [1] = {
+        values = {13, 25, 35, 44, 52, 59, 65, 70, 74},
+        max_level = 8,
+        tech_prefix = "wdm_ship_floor_1_size_tech-"
+    },
+    [2] = {
+        values = {8, 16, 24, 32, 40, 48, 56, 64},
+        max_level = 7,
+        tech_prefix = "wdm_ship_floor_2_size_tech-"
+    },
+    [3] = {
+        values = {8, 16, 24, 30, 36, 40, 43},
+        max_level = 6,
+        tech_prefix = "wdm_ship_floor_3_size_tech-"
+    },
+    [4] = {
+        values = {11, 23, 35, 45, 55, 64},
+        max_level = 5,
+        tech_prefix = "wdm_ship_floor_4_size_tech-"
+    },
+}
+
+local function get_gas_leak_radius_by_tech(force, surface)
+    local floor_num = get_surface_floor_number(surface)
+    local data = GAS_LEAK_RADIUS_BY_FLOOR[floor_num]
+    -- Автоматический расчет для floor >= 5 (ship_interior_4+)
+    if not data then
+        local max_level = 9 - floor_num        -- уровней становится меньше с ростом floor
+        if max_level < 1 then max_level = 1 end
+        local base_radius = 14 + (floor_num - 5) * 3  -- базовый радиус увеличивается
+        local increment = 8 + (floor_num - 5)          -- прирост за уровень
+        local values = {}
+        for i = 0, max_level do
+            values[i + 1] = base_radius + increment * i
+        end
+        data = { values = values, max_level = max_level, tech_prefix = nil }
+    end
+
+    local lvl = 0
+    if data.tech_prefix and force and force.valid and force.technologies then
+        for l = data.max_level, 1, -1 do
+            local tech = force.technologies[data.tech_prefix .. tostring(l)]
+            if tech and tech.researched then
+                lvl = l
+                break
+            end
+        end
+    end
+
+    local max_radius = data.values[lvl + 1] or data.values[1] or 12
+    -- initial_radius = 25% от max_radius
+    local initial_radius = math.max(2, math.floor(max_radius * 0.25))
+
+    return max_radius, initial_radius
 end
 
 -- Вычисляет min/max дистанции спавна по уровню технологии и опциональному модификатору
@@ -1648,75 +1772,6 @@ local function find_boss_edge_spawn_position(surface, ship, force, edge_distance
     return nil
 end
 
-
-
-
--- ============================================================
--- СПАВН СУЩНОСТЕЙ (helper)
--- ============================================================
---[[
-local function spawn_pirate_base(ship, surface)
-    if not (surface and surface.valid) then return end
-
-    local force = game.forces.pirate or game.create_force("pirate")
-    local pirate_pos = find_spawn_position_near_ship(ship, surface, 200, 400)
-    if not pirate_pos then return end
-
-    if ship and ship.force and ship.force.chart then
-        ship.force.chart(surface, {{pirate_pos.x - 64, pirate_pos.y - 64}, {pirate_pos.x + 64, pirate_pos.y + 64}})
-    end
-
-    local pirate_tile = "refined-hazard-concrete-left"
-    local radius = 16
-
-    local tiles = {}
-    for x = -radius, radius do
-        for y = -radius, radius do
-            table.insert(tiles, { name = pirate_tile, position = { pirate_pos.x + x, pirate_pos.y + y } })
-        end
-    end
-    surface.set_tiles(tiles)
-
-    local terminal = surface.create_entity{
-        name = "wdm_terminal-2",
-        position = pirate_pos,
-        force = force
-    }
-
-    local turrets = {
-        "wdm_pirate_gun-turret",
-        "wdm_pirate_rocket-turret",
-        "wdm_pirate_laser-turret"
-    }
-    for i = 1, 6 do
-        local tpos = { x = pirate_pos.x + math.random(-10, 10), y = pirate_pos.y + math.random(-10, 10) }
-        local turret = surface.create_entity{ name = turrets[math.random(#turrets)], position = tpos, force = force }
-        if turret and turret.valid then
-            if turret.name == "wdm_pirate_gun-turret" then turret.insert({ name = "piercing-rounds-magazine", count = 10 }) end
-            if turret.name == "wdm_pirate_rocket-turret" then turret.insert({ name = "rocket", count = 5 }) end
-            if turret.name == "wdm_pirate_laser-turret" then turret.energy = 500000 end
-        end
-    end
-
-    for i = 1, 4 + math.random(3) do
-        surface.create_entity{
-            name = math.random() < 0.5 and "defender" or "destroyer",
-            position = { pirate_pos.x + math.random(-8, 8), pirate_pos.y + math.random(-8, 8) },
-            force = force
-        }
-    end
-
-    rendering.draw_sprite{
-        sprite = "space_pirate",
-        x_scale = 0.7, y_scale = 0.7,
-        target = { position = { pirate_pos.x, pirate_pos.y - 2 } },
-        surface = surface
-    }
-    game.print({"pirate_base",pirate_pos.gps_tag})
-    debug("[WDM Boss Expansion] в  РџРёСЂР°С‚С‹ РїРѕСЃС‚СЂРѕРёР»Рё РІСЂРµРјРµРЅРЅС‹Р№ Р»Р°РіРµСЂСЊ РЅР° РїРѕРІРµСЂС…РЅРѕСЃС‚Рё " .. surface.name)
-    surface.play_sound{ path = "mf_sound_siren", volume_modifier = 0.8 }
-end
-]]
 local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts)
     if not (surface and surface.valid) then return end
     prototype = prototype or "kj_electric_laser_t1"
@@ -1812,6 +1867,7 @@ local find_safe_teleport_position
 local spawn_crystals
 local ensure_crystal_tick
 local collect_ship_floor_surfaces_for_force
+local open_gas_leak_repair_gui
 
 -- ============================================================
 -- СИСТЕМА ПЛАНИРОВАНИЯ
@@ -2509,6 +2565,605 @@ ACTIONS.bright_day = function(surface, ev, ship_stub, meta)
     debug("bright_day started on surface " .. tostring(surface.name) .. ", solar=" .. tostring(solar_mult) .. " daytime=" .. tostring(daytime))
 end
 
+-- GAS LEAK SYSTEM
+-- Структура: { [player_index] = { frame = ..., cost_labels = [...], repair_btn = ..., surface_index = ... } }
+local gas_leak_gui_cache = {}
+
+local gas_leak_ticker_active = false
+
+-- Хелпер: получить force из ship_stub
+local function resolve_force_from_stub(ship_stub)
+    if not ship_stub then return game.forces["player"] end
+    local force = ship_stub.force
+    if type(force) == "table" and force.valid then return force end
+    if type(force) == "string" then force = game.forces[force] end
+    if force and force.valid then return force end
+    return game.forces["player"]
+end
+
+-- Хелпер: конфиг gas_leak
+local function get_gas_leak_cfg()
+    return storage.events and storage.events.gas_leak or DEFAULT_EVENTS.gas_leak
+end
+
+-- Проверка, может ли сила производить данный предмет
+local function is_item_available_for_force(force, item_name)
+    if not (force and force.valid) then return false end
+    local recipe = force.recipes[item_name]
+    if recipe then
+        return recipe.enabled == true
+    end
+    local item_proto = prototypes.item[item_name]
+    if not item_proto then
+        return false
+    end
+    return true
+end
+
+-- Генерация случайного repair_cost из пула предметов
+local function generate_random_repair_cost(cfg, force)
+    if not cfg then return nil end
+    
+    local pool = cfg.item_pool
+    if not pool or #pool == 0 then
+        return {}
+    end
+    
+    local available_pool = {}
+    for _, item in ipairs(pool) do
+        if is_item_available_for_force(force, item.name) then
+            available_pool[#available_pool + 1] = item
+        end
+    end
+    
+    if #available_pool == 0 then
+        return {}
+    end
+    
+    local count = math.min(cfg.repair_items_count or 4, #available_pool)
+    local result = {}
+    local used_indices = {}
+    local attempts = 0
+    local max_attempts = count * 3
+    while #result < count and attempts < max_attempts do
+        attempts = attempts + 1
+        local idx = math.random(#available_pool)
+        
+        -- Проверяем уникальность через хэш-таблицу (O(1))
+        if not used_indices[idx] then
+            used_indices[idx] = true
+            local item = available_pool[idx]
+            local item_count = math.random(item.count_min, item.count_max)
+            result[#result + 1] = {
+                name = item.name,
+                count = item_count
+            }
+        end
+    end
+    if #result < count then
+        for i = 1, #available_pool do
+            if not used_indices[i] then
+                local item = available_pool[i]
+                local item_count = math.random(item.count_min, item.count_max)
+                result[#result + 1] = {
+                    name = item.name,
+                    count = item_count
+                }
+                if #result >= count then break end
+            end
+        end
+    end
+    
+    return result
+end
+
+-- Получить repair_cost для конкретной утечки (с учетом случайной генерации)
+local function get_gas_leak_repair_cost(surface_index)
+    if not surface_index then return {} end
+    local leak_data = storage.gas_leak_active and storage.gas_leak_active[surface_index]
+    if leak_data then
+        -- Если repair_cost уже сохранён — возвращаем его
+        if leak_data.repair_cost then
+            return leak_data.repair_cost
+        end
+        -- Если нет — генерируем один раз и кешируем обратно в запись
+        local force = nil
+        if leak_data.force_name and game.forces and game.forces[leak_data.force_name] then
+            force = game.forces[leak_data.force_name]
+        end
+        if not (force and force.valid) then
+            force = game.forces["player"]
+        end
+        local new_cost = generate_random_repair_cost(get_gas_leak_cfg(), force) or {}
+        leak_data.repair_cost = new_cost
+        return new_cost
+    end
+    -- Если записи вообще нет — возвращаем пустой массив
+    return {}
+end
+
+-- Проверка, может ли игрок починить утечку
+local function can_repair_gas_leak(player, surface_index)
+    if not (player and player.valid) then return false, "no_player" end
+    local leak_data = storage.gas_leak_active and storage.gas_leak_active[surface_index]
+    if not (leak_data and leak_data.active) then return false, "no_leak" end
+    
+    local cost = get_gas_leak_repair_cost(surface_index) or {}
+    for _, item in ipairs(cost) do
+        if player.get_item_count(item.name) < item.count then
+            return false, "missing_resources"
+        end
+    end
+    return true, "ok"
+end
+
+local GAS_CLOUD_TYPES = {"poison-cloud", "rainbow-mini-poison-cloud", "dangerous-big-poison-cloud"}
+
+local function spawn_gas_clouds_on_surface(surface, center_pos, count, radius)
+    if not (surface and surface.valid) then return 0 end
+    count = count or 3
+    radius = radius or 3
+    local spawned = 0
+    for i = 1, count do
+        local angle = math.random() * math.pi * 2
+        -- Дистанция разброса облаков от 0 до radius (radius — это максимальный радиус)
+        local dist = math.random() * radius
+        local pos = {
+            x = (center_pos and center_pos.x or 0) + math.cos(angle) * dist,
+            y = (center_pos and center_pos.y or 0) + math.sin(angle) * dist
+        }
+        if is_non_water_tile(surface, pos) then
+            local cloud_name = GAS_CLOUD_TYPES[math.random(#GAS_CLOUD_TYPES)]
+            local ok, cloud = pcall(function()
+                return surface.create_entity{
+                    name = cloud_name,
+                    position = pos,
+                    force = game.forces.neutral
+                }
+            end)
+            if ok and cloud and cloud.valid then
+                spawned = spawned + 1
+            end
+        end
+    end
+    return spawned
+end
+
+-- Спавнит облака на всех этажах корабля
+local function spawn_gas_clouds_on_all_floors(surface, cfg, force, center_pos)
+    if not (surface and surface.valid) then return 0 end
+    local count = cfg.initial_clouds_per_floor or 3
+    local max_radius, initial_radius = get_gas_leak_radius_by_tech(force, surface)
+    local total = spawn_gas_clouds_on_surface(surface, center_pos, count, initial_radius)
+    
+    if force and force.name then
+        for _, deck_surface in ipairs(collect_ship_floor_surfaces_for_force(force)) do
+            local deck_center = { x = 0, y = 0 }
+            if force.get_spawn_position then
+                local ok, sp = pcall(function() return force.get_spawn_position(deck_surface) end)
+                if ok and sp then deck_center = sp end
+            end
+            local deck_max_radius, deck_initial_radius = get_gas_leak_radius_by_tech(force, deck_surface)
+            total = total + spawn_gas_clouds_on_surface(deck_surface, deck_center, count, deck_initial_radius)
+        end
+    end
+    return total
+end
+
+-- Хендлер роста облаков (вызывается из nth_tick)
+local function gas_leak_growth_handler()
+    if not (storage and storage.gas_leak_active) then return end
+    local now = game.tick
+    local cfg = get_gas_leak_cfg()
+    local growth_count = cfg.cloud_growth_count or 2
+    local growth_interval = (cfg.cloud_growth_interval_seconds or 30) * 60
+    
+    for surface_index, leak_data in pairs(storage.gas_leak_active) do
+        if leak_data.active and now >= leak_data.growth_tick then
+            local surface = game.surfaces[surface_index]
+            if surface and surface.valid then
+                local force = nil
+                if leak_data.force_name and game.forces and game.forces[leak_data.force_name] then
+                    force = game.forces[leak_data.force_name]
+                end
+                local max_radius, _ = get_gas_leak_radius_by_tech(force, surface)
+                local growth_radius = math.random(math.max(2, math.floor(max_radius * 0.3)), max_radius)
+                local spawned = spawn_gas_clouds_on_surface(surface, { x = 0, y = 0 }, growth_count, growth_radius)
+                leak_data.clouds_count = (leak_data.clouds_count or 0) + spawned
+                leak_data.growth_tick = now + growth_interval
+                debug("gas_leak growth on surface " .. tostring(surface.name) .. ": +" .. tostring(spawned) .. " clouds (total: " .. tostring(leak_data.clouds_count) .. ", radius: " .. tostring(growth_radius) .. ")")
+            else
+                leak_data.active = false
+            end
+        end
+    end
+end
+
+local COLOR_GREEN = {0.3, 0.8, 0.3}
+local COLOR_RED = {0.9, 0.3, 0.3}
+
+local function gas_leak_gui_update_handler()
+    if not next(gas_leak_gui_cache) then return end
+    
+    -- Получаем repair_cost из первой активной утечки (они все одинаковые)
+    local sample_surface_index = nil
+    for surface_index, _ in pairs(storage.gas_leak_active) do
+        sample_surface_index = surface_index
+        break
+    end
+    local cost = sample_surface_index and get_gas_leak_repair_cost(sample_surface_index)
+    if not cost or #cost == 0 then
+        -- Fallback на дефолтный repair_cost из конфига
+        local cfg = get_gas_leak_cfg()
+        cost = cfg and cfg.repair_cost
+        if not cost or #cost == 0 then return end
+    end
+    
+    local game_players = game.players
+    local storage_leaks = storage.gas_leak_active
+    
+    for player_index, cache in pairs(gas_leak_gui_cache) do
+        local player = game_players[player_index]
+        if not (player and player.valid) then 
+            gas_leak_gui_cache[player_index] = nil 
+            goto continue 
+        end
+        
+        local frame = cache.frame
+        if not (frame and frame.valid) then 
+            gas_leak_gui_cache[player_index] = nil 
+            goto continue 
+        end
+        
+        local surface_index = cache.surface_index
+        local leak_data = surface_index and storage_leaks and storage_leaks[surface_index]
+        if not (leak_data and leak_data.active) then
+            gas_leak_gui_cache[player_index] = nil
+            goto continue
+        end
+        
+        local main_inv = player.get_main_inventory()
+        local cost_labels = cache.cost_labels
+        for idx = 1, #cost do
+            local item = cost[idx]
+            local has_count = main_inv and main_inv.get_item_count(item.name) or 0
+            
+            local amount_label = cost_labels[idx]
+            if amount_label and amount_label.valid then
+                amount_label.caption = {"wdm-expansion.gas_leak_cost_amount", item.count, has_count}
+                local enough = has_count >= item.count
+                local target_color = enough and COLOR_GREEN or COLOR_RED
+                
+                local style = amount_label.style
+                if style.font_color ~= target_color then
+                    style.font_color = target_color
+                end
+            end
+        end
+    local can_repair = can_repair_gas_leak(player, surface_index)
+        local repair_btn = cache.repair_btn
+        
+        if repair_btn and repair_btn.valid then
+            if repair_btn.enabled ~= can_repair then
+                repair_btn.enabled = can_repair
+            end
+            local target_tooltip = not can_repair and {"wdm-expansion.gas_leak_repair_no_resources"} or ""
+            if repair_btn.tooltip ~= target_tooltip then
+                repair_btn.tooltip = target_tooltip
+            end
+        end
+        
+        ::continue::
+    end
+end
+
+-- Единый nth_tick хендлер для gas_leak
+local function gas_leak_nth_tick_handler()
+    gas_leak_growth_handler()
+    gas_leak_gui_update_handler()
+    -- Отключаем тикер только если нет активных утечек
+    if gas_leak_ticker_active and not (storage and storage.gas_leak_active and next(storage.gas_leak_active)) then
+        script.on_nth_tick(62, nil)
+        gas_leak_ticker_active = false
+    end
+end
+
+-- Включает on_nth_tick(62) если ещё не включён
+local function gas_leak_ensure_ticker()
+    if not gas_leak_ticker_active then
+        script.on_nth_tick(62, gas_leak_nth_tick_handler)
+        gas_leak_ticker_active = true
+    end
+end
+
+-- Пытается выключить on_nth_tick(62)
+local function gas_leak_try_stop_ticker()
+    if gas_leak_ticker_active and not (storage and storage.gas_leak_active and next(storage.gas_leak_active)) then
+        script.on_nth_tick(62, nil)
+        gas_leak_ticker_active = false
+    end
+end
+
+-- ACTION: gas_leak - spawn poison clouds on all ship floors and planet surface
+ACTIONS.gas_leak = function(surface, ev, ship_stub, meta)
+    if not (surface and surface.valid) then return end
+    
+    local cfg = ev or DEFAULT_EVENTS.gas_leak
+    local force = resolve_force_from_stub(ship_stub)
+    local surface_index = surface.index
+    local growth_interval = (cfg.cloud_growth_interval_seconds or 30) * 60
+    
+    -- Генерируем случайную стоимость ремонта с учётом доступных предметов для силы
+    local random_repair_cost = generate_random_repair_cost(cfg, force)
+    
+    storage.gas_leak_active = storage.gas_leak_active or {}
+    local leak_entry = {
+        active = true,
+        force_name = force and force.name or "player",
+        growth_tick = game.tick + growth_interval,
+        clouds_count = 0,
+        repair_cost = random_repair_cost
+    }
+    
+    -- Запись для планеты
+    storage.gas_leak_active[surface_index] = leak_entry
+    
+    -- Записи для этажей
+    if force and force.name then
+        for _, deck_surface in ipairs(collect_ship_floor_surfaces_for_force(force)) do
+            if not storage.gas_leak_active[deck_surface.index] then
+                storage.gas_leak_active[deck_surface.index] = {
+                    active = true,
+                    force_name = force.name or "player",
+                    growth_tick = game.tick + growth_interval,
+                    clouds_count = 0,
+                    repair_cost = random_repair_cost
+                }
+            end
+        end
+    end
+    
+    local center = ship_stub and ship_stub.position or { x = 0, y = 0 }
+    local spawned = spawn_gas_clouds_on_all_floors(surface, cfg, force, center)
+    
+    if update_tick_handlers then update_tick_handlers() end
+    
+    game.print({ "wdm-expansion.gas_leak_started", surface.name })
+    for _, player in pairs(game.connected_players) do
+        if player.surface and player.surface.valid and player.surface.index == surface_index then
+            open_gas_leak_repair_gui(player, surface_index)
+        end
+    end
+    debug("gas_leak started on surface " .. tostring(surface.name) .. ", initial clouds: " .. tostring(spawned))
+end
+
+-- Миграция утечки газа на новую поверхность (при варпе)
+local function migrate_gas_leaks_to_new_surface(destination_surface, force)
+    if not (storage and storage.gas_leak_active and next(storage.gas_leak_active)) then return end
+
+    local cfg = get_gas_leak_cfg()
+    local growth_interval = (cfg.cloud_growth_interval_seconds or 30) * 60
+
+    -- Сохраняем данные из первой активной записи
+    local template_entry = nil
+    for _, entry in pairs(storage.gas_leak_active) do
+        if entry.active then
+            template_entry = {
+                active = true,
+                force_name = entry.force_name or (force and force.name) or "player",
+                growth_tick = game.tick + growth_interval,
+                clouds_count = entry.clouds_count or 0
+            }
+            break
+        end
+    end
+
+    if not template_entry then return end
+
+    -- Уничтожаем все типы облаков на старых поверхностях
+    for surface_index, _ in pairs(storage.gas_leak_active) do
+        local surface = game.surfaces[surface_index]
+        if surface and surface.valid then
+            for _, cloud_name in ipairs(GAS_CLOUD_TYPES) do
+                for _, cloud in ipairs(surface.find_entities_filtered{name = cloud_name}) do
+                    if cloud and cloud.valid then cloud.destroy() end
+                end
+            end
+        end
+    end
+
+    -- Очищаем старые записи
+    storage.gas_leak_active = {}
+
+    -- Создаем запись для новой планеты
+    local new_surface_index = destination_surface.index
+    storage.gas_leak_active[new_surface_index] = {
+        active = true,
+        force_name = template_entry.force_name,
+        growth_tick = game.tick + growth_interval,
+        clouds_count = 0
+    }
+
+    -- Создаем записи для новых этажей корабля
+    if force and force.name then
+        for _, deck_surface in ipairs(collect_ship_floor_surfaces_for_force(force)) do
+            if not storage.gas_leak_active[deck_surface.index] then
+                storage.gas_leak_active[deck_surface.index] = {
+                    active = true,
+                    force_name = force.name or "player",
+                    growth_tick = game.tick + growth_interval,
+                    clouds_count = 0
+                }
+            end
+        end
+    end
+
+    -- Спавним облака на новых поверхностях
+    local center = { x = 0, y = 0 }
+    spawn_gas_clouds_on_all_floors(destination_surface, cfg, force, center)
+
+    -- Открываем GUI для игроков на новой поверхности
+    for _, player in pairs(game.connected_players) do
+        if player.surface and player.surface.valid and player.surface.index == new_surface_index then
+            open_gas_leak_repair_gui(player, new_surface_index)
+        end
+    end
+
+    debug("Gas leaks migrated to new surface " .. tostring(destination_surface.name))
+end
+
+-- Остановка всех утечек газа
+local function stop_all_gas_leaks()
+    if not (storage and storage.gas_leak_active) then return end
+    for surface_index, _ in pairs(storage.gas_leak_active) do
+        local surface = game.surfaces[surface_index]
+        if surface and surface.valid then
+            -- Уничтожаем все типы газовых облаков
+            for _, cloud_name in ipairs(GAS_CLOUD_TYPES) do
+                for _, cloud in ipairs(surface.find_entities_filtered{name = cloud_name}) do
+                    if cloud and cloud.valid then cloud.destroy() end
+                end
+            end
+        end
+    end
+    storage.gas_leak_active = {}
+    gas_leak_try_stop_ticker()
+    debug("All gas leaks stopped")
+end
+
+-- Починка утечки газа (забирает ресурсы у игрока)
+local function repair_gas_leak(player, surface_index)
+    if not (player and player.valid) then return false end
+    local leak_data = storage.gas_leak_active and storage.gas_leak_active[surface_index]
+    if not (leak_data and leak_data.active) then return false end
+    
+    local cost = get_gas_leak_repair_cost(surface_index) or {}
+    for _, item in ipairs(cost) do
+        local inventory = player.get_main_inventory()
+        if inventory then
+            local removed = inventory.remove({name = item.name, count = item.count})
+            if removed < item.count and player.character then
+                local char_inv = player.character.get_inventory(defines.inventory.character_main)
+                if char_inv then
+                    char_inv.remove({name = item.name, count = item.count - removed})
+                end
+            end
+        end
+    end
+    
+    leak_data.active = false
+    stop_all_gas_leaks()
+    game.print({ "wdm-expansion.gas_leak_floor_repaired", game.surfaces[surface_index] and game.surfaces[surface_index].name or "unknown" })
+    debug("gas_leak repaired on surface " .. tostring(surface_index) .. " by player " .. tostring(player.name))
+    return true
+end
+
+-- Открыть GUI для ремонта системы фильтрации газа
+open_gas_leak_repair_gui = function(player, surface_index)
+    if not (player and player.valid) then return end
+    
+    if player.gui.screen["wdm_gas_leak_repair_frame"] then
+        player.gui.screen["wdm_gas_leak_repair_frame"].destroy()
+    end
+    
+    local can_repair = can_repair_gas_leak(player, surface_index)
+    local cfg = get_gas_leak_cfg()
+    local cost = get_gas_leak_repair_cost(surface_index) or cfg.repair_cost or {}
+    local main_inv = player.get_main_inventory()
+    
+    local frame = player.gui.screen.add{
+        type = "frame",
+        name = "wdm_gas_leak_repair_frame",
+        direction = "vertical",
+        caption = {"wdm-expansion.has_problem"}
+    }
+    frame.auto_center = true
+    frame.style.width = 400
+    
+    local title_flow = frame.add{type = "flow", direction = "horizontal"}
+    title_flow.style.horizontally_stretchable = true
+    title_flow.add{type = "label", caption = {"wdm-expansion.gas_leak_repair_title"}, style = "frame_title"}
+    local drag_handle = title_flow.add{type = "empty-widget", style = "draggable_space"}
+    drag_handle.style.horizontally_stretchable = true
+    drag_handle.drag_target = frame
+    title_flow.add{type = "sprite-button", name = "wdm-gas-leak-close", sprite = "utility/close", style = "frame_action_button"}
+    
+    local desc = frame.add{type = "label", caption = {"wdm-expansion.gas_leak_repair_desc"}}
+    desc.style.single_line = false
+    for _, pad in ipairs({"top_padding", "left_padding", "right_padding"}) do desc.style[pad] = 8 end
+    
+    local cost_table = frame.add{type = "table", column_count = 3}
+    cost_table.style.horizontally_stretchable = true
+    for _, pad in ipairs({"top_padding", "left_padding", "right_padding"}) do cost_table.style[pad] = 8 end
+    
+    local cost_labels = {}
+    for idx, item in ipairs(cost) do
+        local has_count = main_inv and main_inv.get_item_count(item.name) or 0
+        cost_table.add{type = "sprite", sprite = "item/" .. item.name}
+        cost_table.add{type = "label", caption = {"item-name." .. item.name}}
+        local amount_label = cost_table.add{
+            type = "label",
+            caption = {"wdm-expansion.gas_leak_cost_amount", item.count, has_count},
+            style = "semibold_label"
+        }
+        amount_label.style.font_color = (has_count >= item.count) and {0.3, 0.8, 0.3} or {0.9, 0.3, 0.3}
+        cost_labels[#cost_labels + 1] = amount_label
+    end
+    
+    local button_flow = frame.add{type = "flow", direction = "horizontal"}
+    button_flow.style.horizontal_align = "center"
+    button_flow.style.top_padding = 12
+    button_flow.style.bottom_padding = 8
+    
+    local repair_btn = button_flow.add{
+        type = "button",
+        name = "wdm-gas-leak-repair-btn",
+        caption = {"wdm-expansion.gas_leak_repair_button"},
+        enabled = can_repair,
+        style = "confirm_button"
+    }
+    repair_btn.style.width = 200
+    if not can_repair then repair_btn.tooltip = {"wdm-expansion.gas_leak_repair_no_resources"} end
+    repair_btn.tags = { surface_index = surface_index }
+    
+    gas_leak_gui_cache[player.index] = { frame = frame, cost_labels = cost_labels, repair_btn = repair_btn, surface_index = surface_index }
+    gas_leak_ensure_ticker()
+    player.opened = frame
+end
+
+-- Обработчик клика по GUI gas_leak
+local function on_gas_leak_gui_click(event)
+    if not (event and event.element and event.player_index) then return end
+    local player = game.get_player(event.player_index)
+    if not (player and player.valid) then return end
+    
+    local element = event.element
+    if element.name == "wdm-gas-leak-close" then
+        if player.gui.screen["wdm_gas_leak_repair_frame"] then player.gui.screen["wdm_gas_leak_repair_frame"].destroy() end
+        gas_leak_gui_cache[player.index] = nil
+        player.opened = nil
+    elseif element.name == "wdm-gas-leak-repair-btn" then
+        local surface_index = element.tags and element.tags.surface_index
+        if surface_index and repair_gas_leak(player, surface_index) then
+            if player.gui.screen["wdm_gas_leak_repair_frame"] then player.gui.screen["wdm_gas_leak_repair_frame"].destroy() end
+            gas_leak_gui_cache[player.index] = nil
+            gas_leak_try_stop_ticker()
+            player.opened = nil
+        end
+    end
+end
+
+-- Обработчик закрытия GUI gas_leak
+local function on_gas_leak_gui_closed(event)
+    if not (event and event.player_index) then return end
+    local player = game.get_player(event.player_index)
+    if not (player and player.valid) then return end
+    if event.gui_type == defines.gui_type.custom and player.gui.screen["wdm_gas_leak_repair_frame"] then
+        player.gui.screen["wdm_gas_leak_repair_frame"].destroy()
+        gas_leak_gui_cache[player.index] = nil
+    end
+end
+
 -- Вспомогательная функция: получить валидный прототип босса
 local function get_valid_boss_prototype(tier)
     tier = math.max(1, math.min(10, tier))
@@ -2766,6 +3421,7 @@ local function apply_crystal_mined_bonus(bonus_override)
 
     storage.enemy_melee_damage_bonus = (storage.enemy_melee_damage_bonus or 0) + bonus
     storage.enemy_biological_damage_bonus = (storage.enemy_biological_damage_bonus or 0) + bonus
+    storage.pirate_humanoid_damage_bonus = (storage.pirate_humanoid_damage_bonus or 0) + bonus
 
     pcall(function()
         local f = game.forces and game.forces["enemy"]
@@ -2773,9 +3429,15 @@ local function apply_crystal_mined_bonus(bonus_override)
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("melee", storage.enemy_melee_damage_bonus) end) end
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("biological", storage.enemy_biological_damage_bonus) end) end
     end)
+    pcall(function()
+        local f = game.forces and game.forces["pirate"]
+        if not (f and f.valid) then return end
+        if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("humanoid_ammo_category", storage.pirate_humanoid_damage_bonus) end) end
+    end)
     game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
     debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus)
-        .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus))
+        .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus)
+        .. ", pirate humanoid bonus is now " .. tostring(storage.pirate_humanoid_damage_bonus))
 end
 
 -- Apply melee and biological buffs when crystal is mined
@@ -2804,17 +3466,25 @@ local function apply_enemy_damage_bonuses()
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("melee", storage.enemy_melee_damage_bonus) end) end
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("biological", storage.enemy_biological_damage_bonus) end) end
     end)
+    pcall(function()
+        local f = game.forces and game.forces["pirate"]
+        if not (f and f.valid) then return end
+        if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("humanoid_ammo_category", storage.pirate_humanoid_damage_bonus) end) end
+    end)
 end
 local function reset_crystal_mined_bonuses()
-    if not storage then return 0, 0 end
+    if not storage then return 0, 0, 0 end
     local old_melee_bonus = storage.enemy_melee_damage_bonus or 0
     local old_biological_bonus = storage.enemy_biological_damage_bonus or 0
+    local old_pirate_humanoid_bonus = storage.pirate_humanoid_damage_bonus or 0
     storage.enemy_melee_damage_bonus = 0
     storage.enemy_biological_damage_bonus = 0
+    storage.pirate_humanoid_damage_bonus = 0
     apply_enemy_damage_bonuses()
     debug("Crystal mined bonuses reset from melee=" .. tostring(old_melee_bonus)
-        .. ", biological=" .. tostring(old_biological_bonus))
-    return old_melee_bonus, old_biological_bonus
+        .. ", biological=" .. tostring(old_biological_bonus)
+        .. ", pirate humanoid=" .. tostring(old_pirate_humanoid_bonus))
+    return old_melee_bonus, old_biological_bonus, old_pirate_humanoid_bonus
 end
 
 local function end_earthquake(surface_index)
@@ -2907,6 +3577,15 @@ local function restore_player_speed_on_surface_change(player_index, old_surface_
     end
 end
 
+-- Внешний обработчик on_ship_post_warp (для ship_abilities)
+-- Устанавливается из control.lua, вызывается из on_ship_post_warp
+local external_ship_post_warp_handler = nil
+
+-- Функция для установки внешнего обработчика on_ship_post_warp
+local function set_external_ship_post_warp_handler(handler)
+    external_ship_post_warp_handler = handler
+end
+
 -- ============================================================
 -- ОБРАБОТЧИКИ FACTORIO
 -- ============================================================
@@ -2938,10 +3617,11 @@ end
 
 -- Проверка землетрясений (вызывается через on_nth_tick раз в секунду)
 local function check_earthquakes()
-    -- Если нет ни активных землетрясений, ни потерянных уровней, отключаем on_nth_tick
+    -- Если нет ни активных землетрясений, ни потерянных уровней, отключаем on_nth_tick(60)
     if (not storage.active_earthquakes or not next(storage.active_earthquakes))
         and (not storage.lost_decks or not next(storage.lost_decks))
-        and (not storage.active_magnetic_storms or not next(storage.active_magnetic_storms)) then
+        and (not storage.active_magnetic_storms or not next(storage.active_magnetic_storms))
+        and (not storage.gas_leak_active or not next(storage.gas_leak_active)) then
         script.on_nth_tick(60, nil)
         return
     end
@@ -3008,10 +3688,16 @@ local function check_earthquakes()
         end_magnetic_storm(si)
     end
     
-    -- Если после удаления землетрясений и восстановления уровней их не осталось, отключаем on_nth_tick
+    -- Вызов внешнего обработчика (ship_abilities.on_tick), установленного из control.lua
+    if external_nth_tick_handler then
+        pcall(external_nth_tick_handler)
+    end
+    
+    -- Если после удаления землетрясений и восстановления уровней их не осталось, отключаем on_nth_tick(60)
     if not next(storage.active_earthquakes)
         and not next(storage.lost_decks or {})
-        and not next(storage.active_magnetic_storms or {}) then
+        and not next(storage.active_magnetic_storms or {})
+        and not (storage.gas_leak_active and next(storage.gas_leak_active)) then
         script.on_nth_tick(60, nil)
     end
 end
@@ -3079,6 +3765,7 @@ update_tick_handlers = function()
     local has_earthquakes = storage.active_earthquakes and next(storage.active_earthquakes)
     local has_lost = storage.lost_decks and next(storage.lost_decks)
     local has_storms = storage.active_magnetic_storms and next(storage.active_magnetic_storms)
+    local has_gas_leaks = storage.gas_leak_active and next(storage.gas_leak_active)
     
     -- Включаем on_tick только если есть scheduled events
     if has_scheduled then
@@ -3087,11 +3774,18 @@ update_tick_handlers = function()
         script.on_event(defines.events.on_tick, nil)
     end
     
-    -- on_nth_tick нужен для землетрясений, потерянных уровней и цикла магнитного шторма
+    -- on_nth_tick(60) нужен для землетрясений, потерянных уровней, цикла магнитного шторма
     if has_earthquakes or has_lost or has_storms then
         script.on_nth_tick(60, check_earthquakes)
     else
         script.on_nth_tick(60, nil)
+    end
+    
+    -- on_nth_tick(62) управляется централизованно через gas_leak_ensure_ticker / gas_leak_try_stop_ticker
+    if has_gas_leaks then
+        gas_leak_ensure_ticker()
+    else
+        gas_leak_try_stop_ticker()
     end
 
     if has_earthquakes or has_lost then
@@ -3377,14 +4071,19 @@ local function on_ship_warping(event)
 
     local old_melee_bonus = storage.enemy_melee_damage_bonus or 0
     local old_biological_bonus = storage.enemy_biological_damage_bonus or 0
+    local old_pirate_humanoid_bonus = storage.pirate_humanoid_damage_bonus or 0
     local new_melee_bonus = old_melee_bonus
     local new_biological_bonus = old_biological_bonus
+    local new_pirate_humanoid_bonus = old_pirate_humanoid_bonus
 
     if old_melee_bonus > 0 then
         new_melee_bonus = math.max(0, old_melee_bonus - 0.015)
     end
     if old_biological_bonus > 0 then
         new_biological_bonus = math.max(0, old_biological_bonus - 0.015)
+    end
+    if old_pirate_humanoid_bonus > 0 then
+        new_pirate_humanoid_bonus = math.max(0, old_pirate_humanoid_bonus - 0.015)
     end
     -- ОСТАНОВКА ГЕНЕРАЦИИ РУИН
     if storage and storage.ruins_active_surfaces then
@@ -3394,18 +4093,22 @@ local function on_ship_warping(event)
     end
 
     cleanup_triggered_surface_events()
-    if new_melee_bonus ~= old_melee_bonus or new_biological_bonus ~= old_biological_bonus then
+    if new_melee_bonus ~= old_melee_bonus or new_biological_bonus ~= old_biological_bonus or new_pirate_humanoid_bonus ~= old_pirate_humanoid_bonus then
         storage.enemy_melee_damage_bonus = new_melee_bonus
         storage.enemy_biological_damage_bonus = new_biological_bonus
+        storage.pirate_humanoid_damage_bonus = new_pirate_humanoid_bonus
         apply_enemy_damage_bonuses()
         debug("Ship warp reduced enemy bonuses: melee "
             .. string.format("%.3f", old_melee_bonus) .. " -> " .. string.format("%.3f", new_melee_bonus)
             .. ", biological "
-            .. string.format("%.3f", old_biological_bonus) .. " -> " .. string.format("%.3f", new_biological_bonus))
+            .. string.format("%.3f", old_biological_bonus) .. " -> " .. string.format("%.3f", new_biological_bonus)
+            .. ", pirate humanoid "
+            .. string.format("%.3f", old_pirate_humanoid_bonus) .. " -> " .. string.format("%.3f", new_pirate_humanoid_bonus))
     else
         debug("Ship warp left enemy bonuses unchanged: melee="
             .. string.format("%.3f", old_melee_bonus)
-            .. ", biological=" .. string.format("%.3f", old_biological_bonus))
+            .. ", biological=" .. string.format("%.3f", old_biological_bonus)
+            .. ", pirate humanoid=" .. string.format("%.3f", old_pirate_humanoid_bonus))
     end
 
     if storage and storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
@@ -3430,6 +4133,69 @@ local function on_ship_warping(event)
     
     if event and event.ship and event.ship.force then
         terminal_drain.on_ship_warped_handler(event.ship.force_name, event.ship.force, event.destination_surface)
+    end
+end
+
+-- WDM ship post-warp event handler (called AFTER warp completes, surface is ready)
+local function on_ship_post_warp(event)
+    -- event.ship, event.destination_surface (может быть nil при варпе в космос)
+    -- Используем event.ship.actual_surface как надёжный источник (как в ship_abilities)
+    local ship = event and event.ship
+    local actual_surface = ship and ship.actual_surface
+    debug("WDM event on_ship_post_warp fired; ship=" .. tostring(ship and ship.name) ..
+          ", actual_surface=" .. tostring(actual_surface and actual_surface.name))
+
+    -- МИГРАЦИЯ УТЕЧКИ ГАЗА НА НОВУЮ ПОВЕРХНОСТЬ
+    -- Здесь поверхность уже полностью готова, можно безопасно мигрировать облака
+    if storage and storage.gas_leak_active and next(storage.gas_leak_active) then
+        if actual_surface and actual_surface.valid then
+            local warp_force = nil
+            if ship then
+                if ship.force_name then
+                    warp_force = game.forces[ship.force_name]
+                elseif ship.force and type(ship.force) == "userdata" and ship.force.valid then
+                    warp_force = ship.force
+                elseif ship.force and type(ship.force) == "string" then
+                    warp_force = game.forces[ship.force]
+                end
+            end
+            migrate_gas_leaks_to_new_surface(actual_surface, warp_force)
+            debug("Gas leaks migrated on post_warp to " .. tostring(actual_surface.name))
+        else
+            -- fallback: если нет целевой поверхности
+            stop_all_gas_leaks()
+            debug("All gas leaks stopped due to ship post-warp (no actual surface)")
+        end
+    end
+    
+    -- Вызов внешнего обработчика (ship_abilities.on_ship_post_warp), установленного из control.lua
+    if external_ship_post_warp_handler then
+        pcall(external_ship_post_warp_handler, event)
+    end
+end
+
+-- Register WDM ship post-warp event
+local function register_wdm_ship_post_warp_handler()
+    if not remote.interfaces["WDM"] then
+        debug("WDM interface not found, will retry later")
+        return false
+    end
+
+    local ok, event_id = pcall(function()
+        return remote.call("WDM", "get_on_ship_post_warp")
+    end)
+    if ok and event_id then
+        debug("[wdm-expansion] Registering on_ship_post_warp handler for gas_leak, event_id=" .. tostring(event_id))
+        script.on_event(event_id, function(event)
+            debug("[wdm-expansion] on_ship_post_warp fired (planetary_events)")
+            if on_ship_post_warp then
+                on_ship_post_warp(event)
+            end
+        end)
+        return true
+    else
+        debug("[wdm-expansion] Failed to get on_ship_post_warp event_id: " .. tostring(event_id or "nil"))
+        return false
     end
 end
 
@@ -3491,7 +4257,6 @@ end
 -- Функция для регистрации обработчиков без изменения storage (для on_load)
 local function register_event_handlers()
     -- Обработчик экстренного возврата всегда активен, независимо от состояния мода
-
     if is_mod_enabled() then
         -- Регистрируем события в WDM
         register_wdm_planet_events()
@@ -3514,18 +4279,17 @@ local function register_event_handlers()
         script.on_nth_tick(60, nil)
         script.on_event(defines.events.on_player_changed_surface, nil)
         script.on_event(defines.events.on_player_joined_game, nil)
-
+        -- gas_leak тикер отключается через централизованную функцию
+        gas_leak_try_stop_ticker()
         -- Отменяем регистрацию обработчиков WDM-событий
         if remote.interfaces["WDM"] then
             local ok, id
             ok, id = pcall(function() return remote.call("WDM", "get_on_custom_planet_event") end)
             if ok and id then script.on_event(id, nil) end
---            ok, id = pcall(function() return remote.call("WDM", "get_on_ship_warping") end)
---            if ok and id then script.on_event(id, nil) end
         end
         debug("WDM Boss Expansion mod DISABLED - event handlers unregistered")
     end
-
+    register_wdm_ship_post_warp_handler()
     sync_chunk_generated_handler()
 
     -- Применяем настройку дружественного урона независимо от включенности
@@ -3706,6 +4470,32 @@ local function on_load()
     if storage.crystal_overgrowth_active and next(storage.crystal_overgrowth_active) then
         ensure_crystal_tick()
     end
+    gas_leak_gui_cache = {}
+    if game and game.players then
+        for _, player in pairs(game.players) do
+            if player and player.valid and player.gui and player.gui.screen then
+                local old_frame = player.gui.screen["wdm_gas_leak_repair_frame"]
+                if old_frame and old_frame.valid then
+                    old_frame.destroy()
+                end
+            end
+        end
+    end
+    if storage and storage.gas_leak_active and next(storage.gas_leak_active) then
+        script.on_nth_tick(2, function()
+            if game and game.players then
+                for _, player in pairs(game.players) do
+                    if player and player.valid and player.surface and player.surface.valid then
+                        local leak_data = storage.gas_leak_active[player.surface.index]
+                        if leak_data and leak_data.active then
+                            open_gas_leak_repair_gui(player, player.surface.index)
+                        end
+                    end
+                end
+            end
+            script.on_nth_tick(2, nil)
+        end)
+    end
 end
 
 -- Debug console commands
@@ -3748,5 +4538,10 @@ return {
     on_runtime_mod_setting_changed = on_runtime_mod_setting_changed,
     find_safe_teleport_position = function(surface, preferred_pos)
         return find_safe_teleport_position(surface, preferred_pos)
-    end
+    end,
+    set_external_ship_post_warp_handler = set_external_ship_post_warp_handler,
+    open_gas_leak_repair_gui = open_gas_leak_repair_gui,
+    on_gas_leak_gui_click = on_gas_leak_gui_click,
+    on_gas_leak_gui_closed = on_gas_leak_gui_closed,
+    stop_all_gas_leaks = stop_all_gas_leaks
 }

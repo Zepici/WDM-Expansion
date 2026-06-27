@@ -1,0 +1,62 @@
+local item_sounds = require("__base__.prototypes.item_sounds")
+
+return {
+  {
+    type = "item",
+    name = "pamk3-esmk3",
+    icon = "__Warp-Drive-Machine-Expansion__/graphics/pamk3/icons/pamk3-esmk3.png",
+    icon_size = 64,
+    place_as_equipment_result = "pamk3-esmk3",
+    subgroup = "military-equipment",
+    order = "a[shield]-c[energy-shield-equipment-mk3]",
+    inventory_move_sound = item_sounds.energy_shield_inventory_move,
+    pick_sound = item_sounds.energy_shield_inventory_pickup,
+    drop_sound = item_sounds.energy_shield_inventory_move,
+    stack_size = 10,
+    weight = 150*kg
+  },
+  {
+    type = "item",
+    name = "pamk3-se",
+    icon = "__Warp-Drive-Machine-Expansion__/graphics/pamk3/icons/pamk3-se.png",
+    icon_size = 64,
+    place_as_equipment_result = "pamk3-se",
+    subgroup = "equipment",
+    order = "a[energy-source]-d[shielded-singularity]",
+    inventory_move_sound = item_sounds.reactor_inventory_move,
+    pick_sound = item_sounds.reactor_inventory_pickup,
+    drop_sound = item_sounds.reactor_inventory_move,
+    stack_size = 10,
+    weight = 1 * tons,
+  },
+  {
+    type = "item",
+    name = "pamk3-inff",
+    icon = "__Warp-Drive-Machine-Expansion__/graphics/pamk3/icons/pamk3-inff.png",
+    icon_size = 64,
+    fuel_category = "chemical",
+    fuel_value = "1000YJ",
+    fuel_acceleration_multiplier = 3,
+    fuel_top_speed_multiplier = 1.2,
+    subgroup = "intermediate-product",
+    order = "r[infinite-fuel]-b",
+    inventory_move_sound = item_sounds.reactor_inventory_move,
+    pick_sound = item_sounds.reactor_inventory_pickup,
+    drop_sound = item_sounds.reactor_inventory_move,
+    stack_size = 1,
+    weight = 1 * tons,
+  },
+  {
+    type = "item",
+    name = "pamk3-pdd",
+    icon = "__base__/graphics/icons/discharge-defense-equipment.png",
+    place_as_equipment_result = "pamk3-pdd",
+    subgroup = "military-equipment",
+    order = "b[active-defense]-c[passive-discharge-defense-equipment]-a[equipment]",
+    inventory_move_sound = item_sounds.electric_large_inventory_move,
+    pick_sound = item_sounds.electric_large_inventory_pickup,
+    drop_sound = item_sounds.electric_large_inventory_move,
+    stack_size = 20,
+    weight = 250*kg
+  }
+}

@@ -6,6 +6,8 @@ local wdm_blueprints_overrides = require("script.wdm_blueprints_overrides")
 local change_events = require("script.change_events")
 local terminal_drain = require("script.terminal_drain")
 local mind_control = require("script.mind_control")
+local ship_abilities = require("script.ship_abilities")
+local ship_abilities_gui = require("script.ship_abilities_gui")
 local mod_commands = require("script.commands")
 
 emergency_return.init({
@@ -24,22 +26,26 @@ local function on_entity_built(event)
     safe_call(planetary_events.on_entity_built, event)
     safe_call(turret_buff.on_entity_built, event)
     safe_call(terminal_drain.on_entity_built, event)
+    safe_call(ship_abilities.on_entity_built, event)
 end
 
 local function on_entity_cloned(event)
     safe_call(heat_pipes.on_entity_cloned, event)
+    safe_call(ship_abilities.on_entity_cloned, event)
 end
 
 local function on_entity_removed(event)
     safe_call(heat_pipes.on_entity_removed, event)
     safe_call(planetary_events.on_entity_removed, event)
     safe_call(turret_buff.on_entity_removed, event)
+    safe_call(ship_abilities.on_entity_removed, event)
 end
 
 local function on_object_destroyed(event)
     safe_call(heat_pipes.on_object_destroyed, event)
     safe_call(planetary_events.on_object_destroyed, event)
     safe_call(terminal_drain.on_object_destroyed, event)
+    safe_call(ship_abilities.on_object_destroyed, event)
 end
 
 local function on_surface_deleted(event)
@@ -104,6 +110,26 @@ local function register_shared_event_handlers()
         safe_call(terminal_drain.on_technology_researched, event)
     end)
 
+    -- GUI events
+    script.on_event(defines.events.on_gui_click, function(event)
+        safe_call(ship_abilities_gui.on_gui_click, event)
+        safe_call(planetary_events.on_gas_leak_gui_click, event)
+    end)
+    
+    script.on_event(defines.events.on_gui_opened, function(event)
+        ship_abilities.on_gui_opened(event)
+        if event.gui_type == defines.gui_type.entity and event.entity and event.entity.valid then
+            if event.entity.name == "wdm-ship-abilities-console" then
+                local player = game.get_player(event.player_index)
+                if player then
+                    player.opened = nil
+                    ship_abilities_gui.open_console(player, event.entity)
+                end
+                return
+            end
+        end
+    end)
+
     -- Mind control system
     script.on_event(defines.events.on_script_trigger_effect, mind_control.on_script_trigger_effect)
 
@@ -112,6 +138,15 @@ local function register_shared_event_handlers()
     elseif defines.events.on_surface_deleted then
         script.on_event(defines.events.on_surface_deleted, on_surface_deleted)
     end
+    
+    -- Handle choose-elem-button changes (waste recycler item selection)
+--    script.on_event(defines.events.on_gui_elem_changed, function(event)
+--        safe_call(ship_abilities_gui.on_gui_elem_changed, event)
+--    end)
+    
+    script.on_event(defines.events.on_gui_closed, function(event)
+        safe_call(ship_abilities_gui.on_gui_closed, event)
+    end)
 end
 
 local function register_wdm_blueprint_overrides()
@@ -162,11 +197,14 @@ script.on_init(function()
     terminal_drain.on_init_or_configuration_changed()
     change_events.apply_default_event_overrides()
     mind_control.on_init()
+    ship_abilities.init()
     randomize_wdm_blueprint_overrides()
     apply_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()
     sync_chunk_generated_handler()
+    -- Привязываем ship_abilities.on_ship_post_warp к planetary_events (единая регистрация on_ship_post_warp)
+    planetary_events.set_external_ship_post_warp_handler(ship_abilities.on_ship_post_warp)
 end)
 
 script.on_configuration_changed(function(_cfg)
@@ -175,10 +213,13 @@ script.on_configuration_changed(function(_cfg)
     turret_buff.on_init_or_configuration_changed()
     terminal_drain.on_init_or_configuration_changed()
     change_events.apply_default_event_overrides()
+    ship_abilities.init()
     register_wdm_blueprint_overrides()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()
     sync_chunk_generated_handler()
+    -- Привязываем ship_abilities.on_ship_post_warp к planetary_events (единая регистрация on_ship_post_warp)
+    planetary_events.set_external_ship_post_warp_handler(ship_abilities.on_ship_post_warp)
 end)
 
 script.on_load(function()
@@ -186,7 +227,12 @@ script.on_load(function()
     heat_pipes.on_load()
     terminal_drain.on_load()
     mind_control.on_load()
+    ship_abilities.on_load()
+    ship_abilities_gui.on_load()
     register_wdm_pirate_ship_spawned_handler()
     register_shared_event_handlers()
     sync_chunk_generated_handler()
+    -- Привязываем ship_abilities.on_ship_post_warp к planetary_events (единая регистрация on_ship_post_warp)
+    planetary_events.set_external_ship_post_warp_handler(ship_abilities.on_ship_post_warp)
+    ship_abilities.update_ticker_state()
 end)

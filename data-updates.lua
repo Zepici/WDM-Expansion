@@ -57,20 +57,7 @@ local function replace_push_back_distance(trigger_effects, old_distance, new_dis
     return replaced
 end
 
-local pdd = data.raw["active-defense-equipment"] and data.raw["active-defense-equipment"]["pamk3-pdd"]
 local dis = data.raw["active-defense-equipment"] and data.raw["active-defense-equipment"]["discharge-defense-equipment"]
-if pdd and pdd.attack_parameters and pdd.attack_parameters.ammo_type then
-    replace_sticker_in_trigger(
-        pdd.attack_parameters.ammo_type.action,
-        "stun-sticker",
-        "wdm-short-stun-sticker"
-    )
-    replace_push_back_distance(
-        pdd.attack_parameters.ammo_type.action,
-        4,
-        3
-    )
-end
 if dis and dis.attack_parameters and dis.attack_parameters.ammo_type then
     replace_sticker_in_trigger(
         dis.attack_parameters.ammo_type.action,
@@ -170,3 +157,4 @@ local atomic_rocket = data.raw["projectile"] and data.raw["projectile"]["atomic-
 if atomic_rocket and atomic_rocket.action then
     scale_radius_fields(atomic_rocket.action, 0.6)
 end
+

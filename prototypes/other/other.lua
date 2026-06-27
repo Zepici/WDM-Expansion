@@ -214,6 +214,123 @@ end
 
 data.raw["resource"]["wdm-ore-warponium"].category = "warponium-solid"
 
+data:extend({
+  {
+    type = "corpse",
+    name = "ship-abilities-console-corpse",
+    icon_size = 64,
+    icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/ship-abilities-console.png",
+    flags = {"placeable-neutral", "not-on-map"},
+    hidden = true,
+    selectable_in_game = false,
+    time_before_removed = 7200,
+    final_render_layer = "remnants",
+    animation = {
+      filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/ship-abilities-console/ship-abilities-console-corpse.png",
+      priority = "extra-high",
+      width = 700,
+      height = 800,
+      frame_count = 1,
+      direction_count = 1,
+      scale = 0.25
+    }
+  }
+})
+
+local new_dummy = table.deepcopy(data.raw["smoke-with-trigger"]["poison-cloud-visual-dummy"])
+new_dummy.name = "diluted-big-poison-cloud-visual-dummy"
+new_dummy.color = {0.15, 0.15, 0.15, 0.550}
+new_dummy.duration = 60 * 60
+data:extend({new_dummy})
+local new_cloud = table.deepcopy(data.raw["smoke-with-trigger"]["poison-cloud"])
+new_cloud.name = "dangerous-big-poison-cloud"
+new_cloud.action.action_delivery.target_effects.action.radius = 22
+new_cloud.action.action_delivery.target_effects.action.action_delivery.target_effects.damage.amount = 4
+new_cloud.particle_count = 80
+new_cloud.particle_spread[1] = new_cloud.particle_spread[1] * 2
+new_cloud.particle_spread[2] = new_cloud.particle_spread[2] * 2
+new_cloud.color = {0.15, 0.15, 0.15, 0.550}
+new_cloud.duration = 60 * 60
+local mid_cluster = table.deepcopy(new_cloud.created_effect[1])
+mid_cluster.cluster_count = 35
+mid_cluster.distance = 12
+mid_cluster.distance_deviation = 5
+mid_cluster.action_delivery.target_effects[1].entity_name = "diluted-big-poison-cloud-visual-dummy"
+new_cloud.created_effect[1].cluster_count = 30
+new_cloud.created_effect[1].distance = 6
+new_cloud.created_effect[1].distance_deviation = 4
+new_cloud.created_effect[1].action_delivery.target_effects[1].entity_name = "diluted-big-poison-cloud-visual-dummy"
+new_cloud.created_effect[2].cluster_count = 45
+new_cloud.created_effect[2].distance = 17.6
+new_cloud.created_effect[2].distance_deviation = 4
+new_cloud.created_effect[2].action_delivery.target_effects[1].entity_name = "diluted-big-poison-cloud-visual-dummy"
+table.insert(new_cloud.created_effect, mid_cluster)
+data:extend({new_cloud})
+
+--2 облако
+
+local colors = {
+  {0.9, 0.1, 0.1, 0.65},
+  {0.9, 0.8, 0.0, 0.65},
+  {0.9, 0.4, 0.0, 0.65},
+  {0.9, 0.2, 0.6, 0.65}
+}
+for i, color in ipairs(colors) do
+  local new_dummy = table.deepcopy(data.raw["smoke-with-trigger"]["poison-cloud-visual-dummy"])
+  new_dummy.name = "rainbow-mini-smoke-dummy-" .. i
+  new_dummy.color = color
+  new_dummy.duration = 60 * 60
+  data:extend({new_dummy})
+end
+local new_cloud = table.deepcopy(data.raw["smoke-with-trigger"]["poison-cloud"])
+new_cloud.name = "rainbow-mini-poison-cloud"
+new_cloud.action.action_delivery.target_effects.action.radius = 5.5
+new_cloud.action.action_delivery.target_effects.action.action_delivery.target_effects.damage.amount = 32
+new_cloud.particle_count = 6
+new_cloud.particle_spread[1] = new_cloud.particle_spread[1] * 0.5
+new_cloud.particle_spread[2] = new_cloud.particle_spread[2] * 0.5
+new_cloud.color = {0.9, 0.4, 0.0, 0.65}
+new_cloud.duration = 60 * 60
+new_cloud.created_effect = {}
+for i = 1, 4 do
+  table.insert(new_cloud.created_effect, {
+    type = "cluster",
+    cluster_count = 2,
+    distance = 1.5,
+    distance_deviation = 1.5,
+    action_delivery = {
+      type = "instant",
+      target_effects = {
+        {
+          type = "create-smoke",
+          show_in_tooltip = false,
+          entity_name = "rainbow-mini-smoke-dummy-" .. i,
+          initial_height = 0
+        }
+      }
+    }
+  })
+  table.insert(new_cloud.created_effect, {
+    type = "cluster",
+    cluster_count = 2,
+    distance = 3.6,
+    distance_deviation = 0.8,
+    action_delivery = {
+      type = "instant",
+      target_effects = {
+        {
+          type = "create-smoke",
+          show_in_tooltip = false,
+          entity_name = "rainbow-mini-smoke-dummy-" .. i,
+          initial_height = 0
+        }
+      }
+    }
+  })
+end
+data:extend({new_cloud})
+
+
 -- Варпониевый гиперкуб
 if mods["space-age"] then
     table.insert(data.raw.technology["automation-3"].prerequisites, "warponium-hypercube")
@@ -242,13 +359,40 @@ else
 end
 
 -- K2-SA Compability
-if mods["Krastorio2-spaced-out"] then
+if mods["Krastorio2"] or mods["Krastorio2-spaced-out"] then
     table.insert(data.raw.technology["kr-energy-control-unit"].prerequisites, "warponium-hypercube")
     table.insert(data.raw.technology["wdm_warponium_processing"].prerequisites, "steel-processing")
     table.insert(data.raw.recipe["kr-energy-control-unit"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
     table.insert(data.raw.recipe["warponium-solar-panel"].ingredients, {type = "item", name = "kr-glass", amount = 30})
     table.insert(data.raw.recipe["emergency-return"].ingredients, {type = "item", name = "kr-glass", amount = 5})
     table.insert(data.raw.recipe["crystal-processing-t2"].results, {type = "item", name = "kr-imersium-plate", amount = 25})
+
+    for _, ing in ipairs(data.raw["recipe"]["pamk3-esmk3"].ingredients) do
+        if ing.name == "energy-shield-mk2-equipment" then
+            ing.name = "kr-energy-shield-mk3-equipment"
+            break
+        end
+    end
+    table.insert(data.raw["recipe"]["pamk3-esmk3"].ingredients, {type = "item", name = "kr-ai-core", amount = 5})
+    table.insert(data.raw["recipe"]["pamk3-esmk3"].ingredients, {type = "item", name = "kr-imersium-plate", amount = 10})
+    table.insert(data.raw["recipe"]["pamk3-esmk3"].ingredients, {type = "item", name = "kr-energy-control-unit", amount = 50})
+    table.insert(data.raw["technology"]["pamk3-esmk3"].prerequisites, "kr-energy-shield-mk3-equipment")
+    table.insert(data.raw["technology"]["pamk3-esmk3"].prerequisites, "kr-ai-core")
+    table.insert(data.raw["technology"]["pamk3-esmk3"].prerequisites, "kr-energy-control-unit")
+    if data.raw["technology"]["kr-energy-shield-mk4-equipment"] then
+        data.raw["technology"]["kr-energy-shield-mk4-equipment"].hidden = true
+        data.raw["technology"]["kr-energy-shield-mk4-equipment"].enabled = false
+    end
+    table.insert(data.raw["recipe"]["pamk3-se"].ingredients, {type = "item", name = "kr-imersium-plate", amount = 50})
+    for _, ing in ipairs(data.raw["recipe"]["exoskeleton-mk2-equipment"].ingredients) do
+        if ing.name == "exoskeleton-equipment" then
+            ing.name = "kr-advanced-exoskeleton-equipment"
+            break
+        end
+    end
+    table.insert(data.raw["technology"]["exoskeleton-mk2-equipment"].prerequisites, "kr-advanced-exoskeleton-equipment")
+    table.insert(data.raw["recipe"]["pamk3-pdd"].ingredients, {type = "item", name = "kr-lithium-sulfur-battery", amount = 5})
+    table.insert(data.raw["technology"]["pamk3-pdd"].prerequisites, "kr-lithium-sulfur-battery")
 end
 
 -- Bob's Power Compability

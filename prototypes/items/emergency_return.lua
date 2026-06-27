@@ -10,13 +10,13 @@ return {
             {
                 name = {"item-description.wdm-emergency-return-loss-label"},
                 value = {"item-description.wdm-emergency-return-loss-50"},
-                quality_values = {
+                quality_values = mods["quality"] and {
                     normal = {"item-description.wdm-emergency-return-loss-50"},
                     uncommon = {"item-description.wdm-emergency-return-loss-45"},
                     rare = {"item-description.wdm-emergency-return-loss-40"},
                     epic = {"item-description.wdm-emergency-return-loss-35"},
                     legendary = {"item-description.wdm-emergency-return-loss-25"}
-                }
+                } or nil
             }
         },
         capsule_action = {
@@ -41,4 +41,3 @@ return {
         }
     }
 }
-

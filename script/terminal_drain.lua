@@ -118,8 +118,12 @@ local function create_drain_for_force(force_name, force, level, target_surface)
     if drain and drain.valid then
         drain.destructible = false
         drain.operable = false
-        drain.minable = false
-        
+        local is_version_2 = (script.active_mods["base"] and script.active_mods["base"] >= "2.1.7") --compabilty for old version
+        if is_version_2 then
+            drain.minable_flag = false
+        else
+            drain.minable = false
+        end
         local force_data = get_or_init_force_data(force_name)
         force_data.level = level
         force_data.position = {x = drain.position.x, y = drain.position.y}

@@ -77,6 +77,26 @@ function mod_commands.register(opts)
 
         log(message)
     end)
+
+    commands.add_command("wdm-gas-leak-repair", "Open gas leak filter repair GUI for the current surface.", function(command)
+        local player = command.player_index and game and game.get_player(command.player_index) or nil
+        if not (player and player.valid) then
+            log("[WDM Expansion] /wdm-gas-leak-repair: no player context")
+            return
+        end
+        local surface = player.surface
+        if not (surface and surface.valid) then
+            player.print("You are not on a valid surface.")
+            return
+        end
+        local ok, result = pcall(function()
+            return planetary_events.open_gas_leak_repair_gui(player, surface.index)
+        end)
+        if not ok then
+            player.print("Failed to open gas leak repair GUI: " .. tostring(result))
+            log("[WDM Expansion] /wdm-gas-leak-repair error: " .. tostring(result))
+        end
+    end)
 end
 
 return mod_commands

@@ -56,3 +56,20 @@ utils.add_data(require("prototypes.entity.mind_control_unit"))
 utils.add_data(require("prototypes.items.warponium-hypercube"))
 utils.add_data(require("prototypes.recipes.warponium-hypercube"))
 utils.add_data(require("prototypes.technologies.warponium-hypercube"))
+
+-- Консоль способностей корабля
+utils.add_data(require("prototypes.entity.ship_abilities_console"))
+utils.add_data(require("prototypes.items.ship_abilities_console"))
+utils.add_data(require("prototypes.recipes.ship_abilities_console"))
+utils.add_data(require("prototypes.technologies.ship_abilities_console"))
+
+-- Варпониевый резервуар
+utils.add_data(require("prototypes.entity.warponium-storage-tank"))
+utils.add_data(require("prototypes.items.warponium-storage-tank"))
+utils.add_data(require("prototypes.recipes.warponium-storage-tank"))
+
+-- Power Armor MK3+ оборудование
+utils.add_data(require("prototypes.items.pamk3_equipment"))
+utils.add_data(require("prototypes.equipment.pamk3_equipment"))
+utils.add_data(require("prototypes.recipes.pamk3_equipment"))
+utils.add_data(require("prototypes.technologies.pamk3_equipment"))
