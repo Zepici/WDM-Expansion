@@ -36,7 +36,7 @@ local technologies = {
     icon = "__Warp-Drive-Machine-Expansion__/graphics/pamk3/technology/pamk3-se.png",
     icons = util.technology_icon_constant_equipment("__Warp-Drive-Machine-Expansion__/graphics/pamk3/technology/pamk3-se.png"),
     icon_size = 256,
-    prerequisites = {"pamk3-esmk3", "pamk3-battmk3", "fission-reactor-equipment", "power-armor-mk2", "space-science-pack"},
+    prerequisites = { "pamk3-esmk3", "fission-reactor-equipment", "space-science-pack" },
     effects =
     {
       {
@@ -50,7 +50,7 @@ local technologies = {
     },
     unit =
     {
-      count = 10000,
+      count = 1000,
       ingredients = {
         {"automation-science-pack", 1},
         {"logistic-science-pack", 1},
@@ -112,7 +112,7 @@ if mods["space-age"] then
       }
     end
     if t.name == "pamk3-esmk3" then
-      t.prerequisites = {"energy-shield-mk2-equipment", "power-armor-mk2", "metallurgic-science-pack"}
+      t.prerequisites = {"energy-shield-mk2-equipment", "power-armor-mk2", "metallurgic-science-pack", "electromagnetic-science-pack"}
       t.unit.count = 750
       t.unit.ingredients = {
         {"automation-science-pack", 1},
