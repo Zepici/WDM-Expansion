@@ -83,7 +83,7 @@ local DEFAULT_EVENTS = {
         wdm_min_tech_progress = 0.1,
         wdm_no_repeat = false,
         wdm_requires_enemies = false,
-        wdm_can_be_removed = true,
+        wdm_can_be_removed = false,
         wdm_difficulty_add = 0.0,
         wdm_alarm = true,
         -- Internal config
@@ -108,7 +108,7 @@ local DEFAULT_EVENTS = {
         wdm_no_repeat = true,
         wdm_requires_enemies = true,
         wdm_can_be_removed = false,
-        wdm_difficulty_add = 0.02,
+        wdm_difficulty_add = 0.015,
         wdm_alarm = true,
         -- Internal config
         action_name = "crystal_overgrowth",
@@ -176,12 +176,12 @@ local DEFAULT_EVENTS = {
     },
     gas_leak = {
         -- WDM planet event parameters
-        wdm_chance = 1,
-        wdm_min_wap = 0,
-        wdm_min_tech_progress = 0,
+        wdm_chance = 0.05,
+        wdm_min_wap = 50,
+        wdm_min_tech_progress = 0.2,
         wdm_no_repeat = true,
         wdm_requires_enemies = false,
-        wdm_can_be_removed = true,
+        wdm_can_be_removed = false,
         wdm_difficulty_add = 0.01,
         wdm_alarm = true,
         -- Internal config
@@ -2944,7 +2944,6 @@ local function migrate_gas_leaks_to_new_surface(destination_surface, force)
     local cfg = get_gas_leak_cfg()
     local growth_interval = (cfg.cloud_growth_interval_seconds or 30) * 60
 
-    -- Сохраняем данные из первой активной записи
     local template_entry = nil
     for _, entry in pairs(storage.gas_leak_active) do
         if entry.active then
@@ -2952,7 +2951,8 @@ local function migrate_gas_leaks_to_new_surface(destination_surface, force)
                 active = true,
                 force_name = entry.force_name or (force and force.name) or "player",
                 growth_tick = game.tick + growth_interval,
-                clouds_count = entry.clouds_count or 0
+                clouds_count = entry.clouds_count or 0,
+                repair_cost = entry.repair_cost
             }
             break
         end
@@ -2974,17 +2974,15 @@ local function migrate_gas_leaks_to_new_surface(destination_surface, force)
 
     -- Очищаем старые записи
     storage.gas_leak_active = {}
-
-    -- Создаем запись для новой планеты
     local new_surface_index = destination_surface.index
     storage.gas_leak_active[new_surface_index] = {
         active = true,
         force_name = template_entry.force_name,
         growth_tick = game.tick + growth_interval,
-        clouds_count = 0
+        clouds_count = 0,
+        repair_cost = template_entry.repair_cost
     }
 
-    -- Создаем записи для новых этажей корабля
     if force and force.name then
         for _, deck_surface in ipairs(collect_ship_floor_surfaces_for_force(force)) do
             if not storage.gas_leak_active[deck_surface.index] then
@@ -2992,7 +2990,8 @@ local function migrate_gas_leaks_to_new_surface(destination_surface, force)
                     active = true,
                     force_name = force.name or "player",
                     growth_tick = game.tick + growth_interval,
-                    clouds_count = 0
+                    clouds_count = 0,
+                    repair_cost = template_entry.repair_cost
                 }
             end
         end
