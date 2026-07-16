@@ -1,3 +1,27 @@
+local assembler2pipepictures =
+{
+  north = util.sprite_load("__base__/graphics/entity/assembling-machine-2/assembling-machine-2-pipe-N",
+  {
+    priority = "extra-high",
+    scale = 0.5,
+  }),
+  east = util.sprite_load("__base__/graphics/entity/assembling-machine-2/assembling-machine-2-pipe-E",
+  {
+    priority = "extra-high",
+    scale = 0.5,
+  }),
+  south = util.sprite_load("__base__/graphics/entity/assembling-machine-2/assembling-machine-2-pipe-S",
+  {
+    priority = "extra-high",
+    scale = 0.5,
+  }),
+  west = util.sprite_load("__base__/graphics/entity/assembling-machine-2/assembling-machine-2-pipe-W",
+  {
+    priority = "extra-high",
+    scale = 0.5,
+  }),
+}
+
 return {
     {
         type = "assembling-machine",
@@ -24,7 +48,7 @@ return {
         fluid_boxes = {
             {
                 production_type = "input",
-                pipe_picture = assembler2pipepictures(),
+                pipe_picture = assembler2pipepictures,
                 pipe_covers = pipecoverspictures(),
                 volume = 100,
                 pipe_connections = {
@@ -33,7 +57,7 @@ return {
             },
             {
                 production_type = "input",
-                pipe_picture = assembler2pipepictures(),
+                pipe_picture = assembler2pipepictures,
                 pipe_covers = pipecoverspictures(),
                 volume = 100,
                 pipe_connections = {
@@ -42,7 +66,7 @@ return {
             },
             {
                 production_type = "output",
-                pipe_picture = assembler2pipepictures(),
+                pipe_picture = assembler2pipepictures,
                 pipe_covers = pipecoverspictures(),
                 volume = 100,
                 pipe_connections = {
@@ -51,7 +75,7 @@ return {
             },
                         {
                 production_type = "output",
-                pipe_picture = assembler2pipepictures(),
+                pipe_picture = assembler2pipepictures,
                 pipe_covers = pipecoverspictures(),
                 volume = 100,
                 pipe_connections = {

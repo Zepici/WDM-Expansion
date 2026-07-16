@@ -11,15 +11,15 @@ return {
                 tint = {r=1, g=0.2, b=0.6, a=1}
             }
         },
-        category = "warponium",
+        categories = {"warponium"},
         ingredients = {
             {type = "item", name = "crystal", amount = 1},
             {type = "fluid", name = "sulfuric-acid", amount = 500}
         },
         results = {
-            {type = "item", name = "crystal", amount = 1, probability = 0.1},
-            {type = "item", name = "uranium-235", amount = 1, probability = 0.1},
-            {type = "item", name = "warponium-plate", amount = 10, probability = 0.5},
+            {type = "item", name = "crystal", amount = 1, independent_probability = 0.1},
+            {type = "item", name = "uranium-235", amount = 1, independent_probability = 0.1},
+            {type = "item", name = "warponium-plate", amount = 10, independent_probability = 0.5},
             {type = "item", name = "stone", amount = 200},
             {type = "item", name = "iron-plate", amount = 100},
             {type = "item", name = "copper-plate", amount = 100},
@@ -42,15 +42,15 @@ return {
                 tint = {r=1, g=0.2, b=0.6, a=1}
             }
         },
-        category = "warponium",
+        categories = {"warponium"},
         ingredients = {
             {type = "item", name = "crystal", amount = 1},
             {type = "fluid", name = "sulfuric-acid", amount = 500}
         },
         results = {
-            {type = "item", name = "crystal", amount = 1, probability = 0.5},
-            {type = "item", name = "uranium-235", amount = 1, probability = 0.1},
-            {type = "item", name = "warponium-plate", amount = 10, probability = 0.5},
+            {type = "item", name = "crystal", amount = 1, independent_probability = 0.5},
+            {type = "item", name = "uranium-235", amount = 1, independent_probability = 0.1},
+            {type = "item", name = "warponium-plate", amount = 10, independent_probability = 0.5},
             {type = "item", name = "stone", amount = 200},
             {type = "item", name = "iron-plate", amount = 100},
             {type = "item", name = "copper-plate", amount = 100},

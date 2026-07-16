@@ -15,7 +15,7 @@ for _, recipe_name in pairs({
 }) do
     local recipe = data.raw["recipe"] and data.raw["recipe"][recipe_name]
     if recipe then
-        recipe.category = "warponium"
+        recipe.categories = {"warponium"}
     end
 end
 
@@ -169,8 +169,6 @@ if base_simulation and base_simulation.init and not base_simulation.init_file th
     end
 end
 
-
-
 local red_refined_concrete = data.raw.item and data.raw.item["red-refined-concrete"]
 if red_refined_concrete then
     red_refined_concrete.custom_tooltip_fields = red_refined_concrete.custom_tooltip_fields or {}
@@ -311,8 +309,8 @@ data:extend({ mini_turret, mini_item })
 
 local scaled_boss_loot = deepcopy(data.raw.unit["maf-boss-biter-1"].loot or {})
 for _, drop in pairs(scaled_boss_loot) do
-    if drop.probability then
-        drop.probability = drop.probability / 1.3
+    if drop.independent_probability then
+        drop.independent_probability = drop.independent_probability / 1.3
     end
 end
 
@@ -323,7 +321,7 @@ for tier = 1, 10 do
 
     turret.name = "kj_electric_laser_t" .. tier
     turret.loot = deepcopy(scaled_boss_loot)
-    turret.minable = nil -- чтобы игрок не мог разобрать
+    turret.minable_flag = false
     turret.max_health = base_turret.max_health * tier                        -- здоровье растёт
     turret.rotation_speed = base_turret.rotation_speed + (tier * 0.001)     -- чуть быстрее крутится
 
@@ -412,6 +410,3 @@ if data.raw["map-gen-presets"] and data.raw["map-gen-presets"]["default"] then
     end
 end
 ]]
-
-
-

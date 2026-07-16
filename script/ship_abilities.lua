@@ -1,4 +1,5 @@
 local ship_abilities = {}
+
 local function is_debug_enabled()
     if not settings.global then return false end
     local setting = settings.global["wdm-expansion-debug"]
@@ -330,7 +331,9 @@ local function consume_warponium_fluid(surface, amount)
     if not (surface and surface.valid and amount > 0) then return false end
     
     local surface_index = surface.index
+    local remaining = amount
     
+    local active_tanks = {}
     for unit_number, record in pairs(storage.ship_abilities.fluid_tanks) do
         if record.surface_index == surface_index then
             local tank = fluid_tank_cache[unit_number]
@@ -338,24 +341,36 @@ local function consume_warponium_fluid(surface, amount)
                 tank = find_entity_for_tank_record(record)
                 fluid_tank_cache[unit_number] = tank
             end
-            if tank and tank.valid then --compabity for old version
-                local removed
-                local is_version_2 = (script.active_mods["base"] and script.active_mods["base"] >= "2.1.7")
-                if is_version_2 and tank.fluidbox then
-                    local extracted = tank.fluidbox.extract_fluid(amount, 1)
-                    removed = extracted and extracted.amount or 0
-                else
-                    removed = tank.remove_fluid({name = "warponium-fluid", amount = amount})
-                end
-                
-                if removed >= amount then return true end
-                amount = amount - removed
+            if tank and tank.valid then
+                table.insert(active_tanks, tank)
             else
                 remove_fluid_tank_by_unit_number(unit_number)
             end
         end
     end
-    return amount <= 0
+    
+    if #active_tanks == 0 then return false end
+    local amount_per_tank = math.floor(amount / #active_tanks)
+    local extra = amount % #active_tanks
+    for i, tank in ipairs(active_tanks) do
+        if remaining <= 0 then break end
+        local to_take = amount_per_tank + (i <= extra and 1 or 0)
+        local removed = tank.extract_fluid({name = "warponium-fluid", amount = to_take})
+        if removed then
+            remaining = remaining - removed
+        end
+    end
+    
+    if remaining > 0 then
+        for i, tank in ipairs(active_tanks) do
+            if remaining <= 0 then break end
+            local removed = tank.extract_fluid({name = "warponium-fluid", amount = remaining})
+            if removed then
+                remaining = remaining - removed
+            end
+        end
+    end
+    return remaining <= 0
 end
 
 
@@ -759,13 +774,8 @@ local function activate_cryo_freeze(force, all_surfaces)
     for _, player in pairs(game.connected_players) do
         if player.valid and player.force.name == force.name and player.character and player.character.valid then
             if all_surfaces[player.surface.name] then
-                state.frozen_players[tostring(player.index)] = true --compability for old verion
-                local is_version_2 = (script.active_mods["base"] and script.active_mods["base"] >= "2.1.7")
-                if is_version_2 then
-                    player.character.disabled_by_script = true
-                else
-                    player.character.active = false
-                end
+                state.frozen_players[tostring(player.index)] = true
+                player.character.disabled_by_script = true
                 player.character.destructible = false
                 frozen_count = frozen_count + 1
                 debug("[ship_abilities] Frozen player: " .. player.name)
@@ -785,12 +795,7 @@ local function deactivate_cryo_freeze(force_name)
         local player_index = tonumber(player_key)
         local player = game.get_player(player_index)
         if player and player.valid and player.character and player.character.valid then
-            local is_version_2 = (script.active_mods["base"] and script.active_mods["base"] >= "2.1.7") --compability for old version
-            if is_version_2 then
-                player.character.disabled_by_script = false
-            else
-                player.character.active = true
-            end
+            player.character.disabled_by_script = false
             player.character.destructible = true
             debug("[ship_abilities] Unfrozen player: " .. player.name)
         end

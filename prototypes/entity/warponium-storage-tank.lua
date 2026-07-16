@@ -12,12 +12,11 @@ return {
     fluid_box = {
       volume = 2500,
       pipe_covers = pipecoverspictures(),
-      hide_connection_info = true,
       pipe_connections = {
-        { direction = defines.direction.north, position = {0, 0} },
-        { direction = defines.direction.east, position = {0, 0} },
-        { direction = defines.direction.south, position = {0, 0} },
-        { direction = defines.direction.west, position = {0, 0} }
+        { direction = defines.direction.north, position = {0, 0}, hide_connection_info = true },
+        { direction = defines.direction.east, position = {0, 0}, hide_connection_info = true },
+        { direction = defines.direction.south, position = {0, 0}, hide_connection_info = true },
+        { direction = defines.direction.west, position = {0, 0}, hide_connection_info = true }
       }
     },
     window_bounding_box = {{-0.125, 0.6875}, {0.1875, 1.1875}},

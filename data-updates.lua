@@ -67,10 +67,11 @@ if dis and dis.attack_parameters and dis.attack_parameters.ammo_type then
 end
 
 table.insert(data.raw.unit["maf-boss-biter-1"].loot, {
-    item = "emergency-return",
-    probability = 0.2,
-    count_min = 1,
-    count_max = 2
+    type = "item",
+    name = "emergency-return",
+    independent_probability = 0.2,
+    amount_min = 1,
+    amount_max = 2
 })
 
 if data.raw["mining-drill"] then
@@ -107,10 +108,11 @@ if mods["Cold_biters"] then
             if unit then
                 unit.loot = table.deepcopy(unit.loot or {})
                 table.insert(unit.loot, {
-                    item = "cb_alien_cold_artifact",
-                    probability = 0.25,
-                    count_min = 10,
-                    count_max = 50
+                    type = "item",
+                    name = "cb_alien_cold_artifact",
+                    independent_probability = 0.25,
+                    amount_min = 10,
+                    amount_max = 50
                 })
             end
         end
@@ -157,4 +159,3 @@ local atomic_rocket = data.raw["projectile"] and data.raw["projectile"]["atomic-
 if atomic_rocket and atomic_rocket.action then
     scale_radius_fields(atomic_rocket.action, 0.6)
 end
-

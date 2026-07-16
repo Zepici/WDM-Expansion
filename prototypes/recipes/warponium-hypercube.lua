@@ -4,7 +4,7 @@ return {
         name = "warponium-hypercube",
         energy_required = 15,
         enabled = false,
-        category = "warponium",
+        categories = {"warponium"},
         ingredients = {
             {type = "item", name = "warponium-plate", amount = 40},
             {type = "fluid", name = "warponium-fluid", amount = 100},

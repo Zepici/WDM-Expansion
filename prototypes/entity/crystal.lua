@@ -36,7 +36,7 @@ return {
         mining_time = 30,
         results = {
             {type = "item", name = "crystal", amount = 5},
-            {type = "item", name = "charged-crystal", amount = 1, probability = 0.2}
+            {type = "item", name = "charged-crystal", amount = 1, independent_probability = 0.2}
         }
     },
     max_health = 10000,

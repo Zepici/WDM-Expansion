@@ -16,7 +16,7 @@ return {
         turret_base_has_direction = true,
         prepare_range = 70,
         collision_box = { { -1.2, -1.2 }, { 1.2, 1.2 } },
-        loot = data.raw.unit["maf-boss-biter-1"].loot,     
+        loot = data.raw.unit["maf-boss-biter-1"].loot,
         attack_parameters = {
             cooldown = 500,
             projectile_creation_distance = 0,
@@ -46,7 +46,7 @@ return {
             {
                 type = "fire",
                 percent = -15
-            },       
+            },
             {
                 type = "physical",
                 percent = 20
@@ -56,7 +56,7 @@ return {
                 percent = 100
             }
         },
-        fast_replaceable_group = "heavy-turret"        
+        fast_replaceable_group = "heavy-turret"
     },
     {
         _base = data.raw["ammo-turret"]["kj_laser"],
@@ -91,7 +91,6 @@ return {
                 energy_consumption = "10MJ"
             }
         },
-        fast_replaceable_group = "heavy-turret"        
-    }    
+        fast_replaceable_group = "heavy-turret"
+    }
 }
-
