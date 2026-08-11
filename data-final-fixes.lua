@@ -386,27 +386,156 @@ if settings.startup["wdm-expansion-zombie"] and settings.startup["wdm-expansion-
     end    
 end
 
---[[
-if data.raw.planet["nauvis"] then
-    local map_gen = data.raw.planet["nauvis"].map_gen_settings
-    map_gen.autoplace_controls = map_gen.autoplace_controls or {}
-    map_gen.autoplace_controls["warponium-ore"] = {}
-    
-    map_gen.autoplace_settings = map_gen.autoplace_settings or {}
-    map_gen.autoplace_settings.entity = map_gen.autoplace_settings.entity or {}
-    map_gen.autoplace_settings.entity.settings = map_gen.autoplace_settings.entity.settings or {}
-    map_gen.autoplace_settings.entity.settings["warponium-ore"] = {}
+-- Magnetic Storm surface conditions (Space Age only)
+if mods["space-age"] then
+
+    data:extend({
+        {
+            type = "surface-property",
+            name = "magnetic-storm",
+            default_value = 0,
+            hidden_in_factoriopedia = false,
+            hidden = false,
+        },
+    })
+
+    local function contains_condition(tbl, name)
+        for _, v in pairs(tbl) do
+            if v.property == name then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function set_storm_value_max(entity, value)
+        if not entity.surface_conditions then
+            entity.surface_conditions = {}
+            table.insert(entity.surface_conditions, { property = "magnetic-storm", max = value })
+        end
+        if not contains_condition(entity.surface_conditions, "magnetic-storm") then
+            table.insert(entity.surface_conditions, { property = "magnetic-storm", max = value })
+        end
+    end
+
+    -- above 20 we have a ban on accumulators
+    for _, entity in pairs(data.raw["accumulator"]) do
+        if not (entity.name == "ring-teleporter") then
+            set_storm_value_max(entity, 20)
+        end
+    end
+
+    -- above 40 we have a ban on solar panels
+    for _, entity in pairs(data.raw["solar-panel"]) do
+        set_storm_value_max(entity, 40)
+    end
+
+    -- above 60 we ban electric poles and generators
+    for _, entity in pairs(data.raw["electric-pole"]) do
+        set_storm_value_max(entity, 60)
+    end
+    for _, entity in pairs(data.raw["generator"]) do
+        set_storm_value_max(entity, 60)
+    end
+    for _, entity in pairs(data.raw["fusion-generator"]) do
+        set_storm_value_max(entity, 60)
+    end
 end
-if data.raw["map-gen-presets"] and data.raw["map-gen-presets"]["default"] then
-    for _, preset in pairs(data.raw["map-gen-presets"]["default"]) do
-        if preset.basic_settings then
-            preset.basic_settings.autoplace_controls = preset.basic_settings.autoplace_controls or {}
-            preset.basic_settings.autoplace_controls["warponium-ore"] = {}
-            preset.basic_settings.autoplace_settings = preset.basic_settings.autoplace_settings or {}
-            preset.basic_settings.autoplace_settings.entity = preset.basic_settings.autoplace_settings.entity or {}
-            preset.basic_settings.autoplace_settings.entity.settings = preset.basic_settings.autoplace_settings.entity.settings or {}
-            preset.basic_settings.autoplace_settings.entity.settings["warponium-ore"] = {}
+
+-- Оверповер-теслапушка: отдельный тип урона.
+-- Сущности с "pirate" в имени получают 100% иммунитет к нему,
+-- у всех остальных копируется их электрический резист (decrease/percent).
+if mods["space-age"] then
+    data:extend({
+        {
+            type = "damage-type",
+            name = "warponium-damage"
+        }
+    })
+
+    local damage_type_name = "warponium-damage"
+    local electric_type_name = "electric"
+
+    local entity_types = {
+        "unit", "unit-spawner", "turret", "car", "spider-unit",
+        "flying-robot", "combat-robot", "character", "ammo-turret",
+        "electric-turret", "fluid-turret", "artillery-turret"
+    }
+
+    -- Проверяем, что это пират И именно юнит (существо)
+    local function is_pirate_unit(prototype_name, entity_type)
+        if type(prototype_name) ~= "string" then return false end
+        return entity_type == "unit" and string.find(prototype_name, "wdm_pirate", 1, true) ~= nil
+    end
+
+    -- Проверяем остальные пиратские структуры (не юниты) и турели для 100% иммунитета
+    local function is_immune_prototype(prototype_name, entity_type)
+        if type(prototype_name) ~= "string" then return false end
+        -- Если это пират, но НЕ юнит (например, спавнер или турель пиратов)
+        if entity_type ~= "unit" and string.find(prototype_name, "wdm_pirate", 1, true) ~= nil then
+            return true
+        end
+        -- Остальные иммунные объекты
+        return prototype_name == "flamethrower-turret"
+            or prototype_name == "artillery-turret"
+            or prototype_name == "kj_electric_laser_mini"
+    end
+
+    local function copy_electric_resist(resistances)
+        if type(resistances) ~= "table" then return nil end
+        for _, resist in pairs(resistances) do
+            if type(resist) == "table" and resist.type == electric_type_name then
+                local copied = table.deepcopy(resist)
+                copied.type = damage_type_name
+                return copied
+            end
+        end
+        return nil
+    end
+
+    for _, entity_type in pairs(entity_types) do
+        for prototype_name, prototype in pairs(data.raw[entity_type] or {}) do
+            local resistances = prototype.resistances
+            if type(resistances) ~= "table" then
+                resistances = {}
+                prototype.resistances = resistances
+            end
+
+            -- Убираем старый резист к нашему типу
+            for i = #resistances, 1, -1 do
+                if type(resistances[i]) == "table" and resistances[i].type == damage_type_name then
+                    table.remove(resistances, i)
+                end
+            end
+
+            local new_resist
+            if is_pirate_unit(prototype_name, entity_type) then
+                -- Только для юнитов-пиратов ставим 80%
+                new_resist = { type = damage_type_name, percent = 80 }
+            elseif is_immune_prototype(prototype_name, entity_type) then
+                -- Пираты других типов (здания/спавнеры) и указанные турели сохраняют 100%
+                new_resist = { type = damage_type_name, percent = 100 }
+            else
+                -- Остальные сущности: копируем их электрический резист
+                new_resist = copy_electric_resist(resistances)
+            end
+
+            if new_resist then
+                table.insert(resistances, new_resist)
+            end
+        end
+    end
+
+    for i = 1, 8 do
+        local terminal_name = "wdm_terminal-" .. i
+        if data.raw["accumulator"][terminal_name] then
+            data.raw["accumulator"][terminal_name].max_health = math.floor((1000 * (3 ^ ((i - 1) / 7))) / 100 + 0.5) * 100
+            data.raw["accumulator"][terminal_name].resistances = data.raw["accumulator"][terminal_name].resistances or {}
+            table.insert(data.raw["accumulator"][terminal_name].resistances, {
+                type = "warponium-damage",
+                percent = 100
+            })
         end
     end
 end
-]]
+

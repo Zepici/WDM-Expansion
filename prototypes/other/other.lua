@@ -1,5 +1,5 @@
 local utils = require("utils")
-if mods["Cold_biters"] then
+if mods["Cold_biters"] and settings.startup["cb-enable-cold-warfare"] and settings.startup["cb-enable-cold-warfare"].value then
     data.raw["armor"]["cb-modular-armor"].resistances =
     {
         {
@@ -72,8 +72,17 @@ if mods["Cold_biters"] then
             decrease = 10
         }
     }
+    data.raw["fluid"]["cb_alien_cold_extract"].subgroup = "fluid"
 end
 
+if mods["Cold_biters"] and settings.startup["cb-enable-cold-warfare"] and settings.startup["cb-enable-cold-warfare"].value and (mods["Krastorio2"] or mods["Krastorio2-spaced-out"]) then
+    data.raw.technology["wdm-coldjet-damage"].unit.ingredients = {
+        {"space-science-pack", 1},
+        {"utility-science-pack", 1}
+    }
+end
+
+if not mods["Power-Armour-Replacer"] then
 data.raw["generator-equipment"]["pamk3-se"].power = "5MW"
 
 data.raw["technology"]["pamk3-pdd"].icons[1].icon = "__Warp-Drive-Machine-Expansion__/graphics/equipment/discharge-defense-equipment.png"
@@ -85,6 +94,9 @@ data.raw["active-defense-equipment"]["pamk3-pdd"].sprite = {
     height = 256
 }
 data.raw["item"]["pamk3-pdd"].icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/discharge-defense-equipment.png"
+data.raw["active-defense-equipment"]["pamk3-pdd"].attack_parameters.range = 12
+end
+
 data.raw["ammo"]["kj_laser_normal"].ammo_type.action.range = 70
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.range = 70
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.width = 6
@@ -98,7 +110,6 @@ data.raw["ammo-turret"]["kj_laser"].hidden_in_factoriopedia = true
 data.raw["electric-turret"]["kj_electric_laser"].hidden = true
 data.raw["electric-turret"]["kj_electric_laser"].hidden_in_factoriopedia = true
 data.raw["artillery-turret"]["artillery-turret"].manual_range_modifier = 1.3
-data.raw["active-defense-equipment"]["pamk3-pdd"].attack_parameters.range = 12
 data.raw["recipe"]["warponium-fluid"].energy_required = 50
 if mods["space-age"] then
     data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_per_shot = "0kJ"
@@ -365,8 +376,10 @@ if mods["Krastorio2"] or mods["Krastorio2-spaced-out"] then
     table.insert(data.raw.recipe["kr-energy-control-unit"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
     table.insert(data.raw.recipe["warponium-solar-panel"].ingredients, {type = "item", name = "kr-glass", amount = 30})
     table.insert(data.raw.recipe["emergency-return"].ingredients, {type = "item", name = "kr-glass", amount = 5})
-    table.insert(data.raw.recipe["crystal-processing-t2"].results, {type = "item", name = "kr-imersium-plate", amount = 25})
+    table.insert(data.raw.recipe["crystal-processing-t2"].results, {type = "item", name = "kr-imersium-plate", amount = 25}) 
+end
 
+if (mods["Krastorio2"] or mods["Krastorio2-spaced-out"]) and not mods["Power-Armour-Replacer"] then
     for _, ing in ipairs(data.raw["recipe"]["pamk3-esmk3"].ingredients) do
         if ing.name == "energy-shield-mk2-equipment" then
             ing.name = "kr-energy-shield-mk3-equipment"

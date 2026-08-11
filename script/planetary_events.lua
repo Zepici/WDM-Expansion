@@ -208,7 +208,7 @@ if has_active_mod("Krastorio2-spaced-out") or has_active_mod("Krastorio2") then
     table.insert(DEFAULT_EVENTS.gas_leak.item_pool, {name = "kr-electronic-components", count_min = 120, count_max = 240})
 end
 
-if has_active_mod("magnetic-storm") then
+if has_active_mod("space-age") then
     DEFAULT_EVENTS.electromagnetic_storm = {
         -- WDM planet event parameters
         wdm_chance = 0.08,
@@ -1083,6 +1083,11 @@ local RUINS_LOOT_POOL = {
     {name = "spidertron", min = 1, max = 1, chance = 0.025, min_threat = 0.8},
     {name = "green-refined-concrete", min = 10, max = 50, chance = 0.025, min_threat = 0.7}
 }
+
+if has_active_mod("space-age") then
+    table.insert(RUINS_LOOT_POOL, {name = "wdm-overpower-tesla-gun", min = 1, max = 1, chance = 0.0125, min_threat = 0.5})
+    table.insert(RUINS_LOOT_POOL, {name = "wdm-overpower-tesla-ammo", min = 1, max = 5, chance = 0.025, min_threat = 0.5})
+end
 
 local function fill_ruins_loot(entities, current_threat)
     if not entities or #entities == 0 then return end
@@ -2438,7 +2443,7 @@ collect_ship_floor_surfaces_for_force = function(force)
 end
 
 ACTIONS.electromagnetic_storm = function(surface, ev, ship_stub, meta)
-    if not has_active_mod("magnetic-storm") then return end
+    if not has_active_mod("space-age") then return end
     if not (surface and surface.valid) then return end
 
     local ev_cfg = ev or DEFAULT_EVENTS.electromagnetic_storm
@@ -4114,7 +4119,7 @@ local function on_ship_warping(event)
         stop_all_crystal_growth()
         debug("All active crystal growth ended due to ship warp")
     end
-    if has_active_mod("magnetic-storm") then
+    if has_active_mod("space-age") then
         -- stop any active storms immediately when a warp happens
         end_all_magnetic_storms()
         debug("All active magnetic storms ended due to ship warp")

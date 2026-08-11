@@ -9,6 +9,7 @@ local mind_control = require("script.mind_control")
 local ship_abilities = require("script.ship_abilities")
 local ship_abilities_gui = require("script.ship_abilities_gui")
 local mod_commands = require("script.commands")
+local magnetic_storm = require("script.magnetic_storm")
 
 emergency_return.init({
     find_safe_teleport_position = planetary_events.find_safe_teleport_position
@@ -73,6 +74,13 @@ local function sync_chunk_generated_handler()
 end
 
 local function register_shared_event_handlers()
+    -- Register magnetic storm overload handler (Space Age only)
+    if script.active_mods["space-age"] then
+        for event_id, handler in pairs(magnetic_storm.events) do
+            script.on_event(event_id, handler)
+        end
+    end
+
     script.on_event(defines.events.on_built_entity, on_entity_built)
     script.on_event(defines.events.on_robot_built_entity, on_entity_built)
     script.on_event(defines.events.on_entity_cloned, on_entity_built)
