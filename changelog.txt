@@ -11,6 +11,8 @@ Date: 2026-08-12
     - The spaceship terminal health now increases based on its level.
   Bugfixes:
     - Fixed a bug that occurred when disabling the "Enable Alien Loot and Frost Warfare" setting in the Frost Biters mod settings.
+  Compatibility:
+    - Added compatibility with "Power Armour & Replacer" mod.
 ---------------------------------------------------------------------------------------------------
 Version: 0.3.0
 Date: 2026-07-16
