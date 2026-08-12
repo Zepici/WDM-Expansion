@@ -10,12 +10,6 @@ utils.add_data(require("prototypes.items.emergency_return"))
 utils.add_data(require("prototypes.technologies.emergency_return"))
 utils.add_data(require("prototypes.recipes.emergency_return"))
 
--- Вооружение
-utils.add_data(require("prototypes.items.exoskeleton"))
-utils.add_data(require("prototypes.technologies.exoskeleton"))
-utils.add_data(require("prototypes.recipes.exoskeleton"))
-utils.add_data(require("prototypes.equipment.exoskeleton"))
-
 -- Связанные тепловые трубы
 utils.add_data(require("prototypes.entity.linked_heat_pipe"))
 utils.add_data(require("prototypes.items.linked_heat_pipe"))
@@ -69,7 +63,27 @@ utils.add_data(require("prototypes.items.warponium-storage-tank"))
 utils.add_data(require("prototypes.recipes.warponium-storage-tank"))
 
 -- Power Armor MK3+ оборудование
+if not mods["Power-Armour-Replacer"] then
 utils.add_data(require("prototypes.items.pamk3_equipment"))
 utils.add_data(require("prototypes.equipment.pamk3_equipment"))
 utils.add_data(require("prototypes.recipes.pamk3_equipment"))
 utils.add_data(require("prototypes.technologies.pamk3_equipment"))
+
+-- Вооружение
+utils.add_data(require("prototypes.items.exoskeleton"))
+utils.add_data(require("prototypes.technologies.exoskeleton"))
+utils.add_data(require("prototypes.recipes.exoskeleton"))
+utils.add_data(require("prototypes.equipment.exoskeleton"))
+end
+
+-- Выращивание морозной железы
+if mods["Cold_biters"] and settings.startup["cb-enable-cold-warfare"] and settings.startup["cb-enable-cold-warfare"].value then
+utils.add_data(require("prototypes.recipes.cold-biters"))
+utils.add_data(require("prototypes.technologies.cold-biters"))
+end
+
+-- Оверповер-теслапушка
+if mods["space-age"] then
+utils.add_data(require("prototypes.items.overpower_tesla_gun"))
+utils.add_data(require("prototypes.entity.overpower_tesla_gun"))
+end

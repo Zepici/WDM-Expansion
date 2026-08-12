@@ -15,7 +15,7 @@ for _, recipe_name in pairs({
 }) do
     local recipe = data.raw["recipe"] and data.raw["recipe"][recipe_name]
     if recipe then
-        recipe.categories = {"warponium"}
+        recipe.category = "warponium"
     end
 end
 
@@ -169,6 +169,8 @@ if base_simulation and base_simulation.init and not base_simulation.init_file th
     end
 end
 
+
+
 local red_refined_concrete = data.raw.item and data.raw.item["red-refined-concrete"]
 if red_refined_concrete then
     red_refined_concrete.custom_tooltip_fields = red_refined_concrete.custom_tooltip_fields or {}
@@ -309,8 +311,8 @@ data:extend({ mini_turret, mini_item })
 
 local scaled_boss_loot = deepcopy(data.raw.unit["maf-boss-biter-1"].loot or {})
 for _, drop in pairs(scaled_boss_loot) do
-    if drop.independent_probability then
-        drop.independent_probability = drop.independent_probability / 1.3
+    if drop.probability then
+        drop.probability = drop.probability / 1.3
     end
 end
 
@@ -321,7 +323,7 @@ for tier = 1, 10 do
 
     turret.name = "kj_electric_laser_t" .. tier
     turret.loot = deepcopy(scaled_boss_loot)
-    turret.minable_flag = false
+    turret.minable = nil -- чтобы игрок не мог разобрать
     turret.max_health = base_turret.max_health * tier                        -- здоровье растёт
     turret.rotation_speed = base_turret.rotation_speed + (tier * 0.001)     -- чуть быстрее крутится
 
@@ -386,27 +388,101 @@ if settings.startup["wdm-expansion-zombie"] and settings.startup["wdm-expansion-
     end    
 end
 
---[[
-if data.raw.planet["nauvis"] then
-    local map_gen = data.raw.planet["nauvis"].map_gen_settings
-    map_gen.autoplace_controls = map_gen.autoplace_controls or {}
-    map_gen.autoplace_controls["warponium-ore"] = {}
-    
-    map_gen.autoplace_settings = map_gen.autoplace_settings or {}
-    map_gen.autoplace_settings.entity = map_gen.autoplace_settings.entity or {}
-    map_gen.autoplace_settings.entity.settings = map_gen.autoplace_settings.entity.settings or {}
-    map_gen.autoplace_settings.entity.settings["warponium-ore"] = {}
-end
-if data.raw["map-gen-presets"] and data.raw["map-gen-presets"]["default"] then
-    for _, preset in pairs(data.raw["map-gen-presets"]["default"]) do
-        if preset.basic_settings then
-            preset.basic_settings.autoplace_controls = preset.basic_settings.autoplace_controls or {}
-            preset.basic_settings.autoplace_controls["warponium-ore"] = {}
-            preset.basic_settings.autoplace_settings = preset.basic_settings.autoplace_settings or {}
-            preset.basic_settings.autoplace_settings.entity = preset.basic_settings.autoplace_settings.entity or {}
-            preset.basic_settings.autoplace_settings.entity.settings = preset.basic_settings.autoplace_settings.entity.settings or {}
-            preset.basic_settings.autoplace_settings.entity.settings["warponium-ore"] = {}
+
+-- Оверповер-теслапушка: отдельный тип урона.
+-- Сущности с "pirate" в имени получают 100% иммунитет к нему,
+-- у всех остальных копируется их электрический резист (decrease/percent).
+if mods["space-age"] then
+    data:extend({
+        {
+            type = "damage-type",
+            name = "warponium-damage"
+        }
+    })
+
+    local damage_type_name = "warponium-damage"
+    local electric_type_name = "electric"
+
+    local entity_types = {
+        "unit", "unit-spawner", "turret", "car", "spider-unit",
+        "flying-robot", "combat-robot", "character", "ammo-turret",
+        "electric-turret", "fluid-turret", "artillery-turret"
+    }
+
+    -- Проверяем, что это пират И именно юнит (существо)
+    local function is_pirate_unit(prototype_name, entity_type)
+        if type(prototype_name) ~= "string" then return false end
+        return entity_type == "unit" and string.find(prototype_name, "wdm_pirate", 1, true) ~= nil
+    end
+
+    -- Проверяем остальные пиратские структуры (не юниты) и турели для 100% иммунитета
+    local function is_immune_prototype(prototype_name, entity_type)
+        if type(prototype_name) ~= "string" then return false end
+        -- Если это пират, но НЕ юнит (например, спавнер или турель пиратов)
+        if entity_type ~= "unit" and string.find(prototype_name, "wdm_pirate", 1, true) ~= nil then
+            return true
+        end
+        -- Остальные иммунные объекты
+        return prototype_name == "flamethrower-turret"
+            or prototype_name == "artillery-turret"
+            or prototype_name == "kj_electric_laser_mini"
+    end
+
+    local function copy_electric_resist(resistances)
+        if type(resistances) ~= "table" then return nil end
+        for _, resist in pairs(resistances) do
+            if type(resist) == "table" and resist.type == electric_type_name then
+                local copied = table.deepcopy(resist)
+                copied.type = damage_type_name
+                return copied
+            end
+        end
+        return nil
+    end
+
+    for _, entity_type in pairs(entity_types) do
+        for prototype_name, prototype in pairs(data.raw[entity_type] or {}) do
+            local resistances = prototype.resistances
+            if type(resistances) ~= "table" then
+                resistances = {}
+                prototype.resistances = resistances
+            end
+
+            -- Убираем старый резист к нашему типу
+            for i = #resistances, 1, -1 do
+                if type(resistances[i]) == "table" and resistances[i].type == damage_type_name then
+                    table.remove(resistances, i)
+                end
+            end
+
+            local new_resist
+            if is_pirate_unit(prototype_name, entity_type) then
+                -- Только для юнитов-пиратов ставим 80%
+                new_resist = { type = damage_type_name, percent = 80 }
+            elseif is_immune_prototype(prototype_name, entity_type) then
+                -- Пираты других типов (здания/спавнеры) и указанные турели сохраняют 100%
+                new_resist = { type = damage_type_name, percent = 100 }
+            else
+                -- Остальные сущности: копируем их электрический резист
+                new_resist = copy_electric_resist(resistances)
+            end
+
+            if new_resist then
+                table.insert(resistances, new_resist)
+            end
+        end
+    end
+
+    for i = 1, 8 do
+        local terminal_name = "wdm_terminal-" .. i
+        if data.raw["accumulator"][terminal_name] then
+            data.raw["accumulator"][terminal_name].max_health = math.floor((1000 * (3 ^ ((i - 1) / 7))) / 100 + 0.5) * 100
+            data.raw["accumulator"][terminal_name].resistances = data.raw["accumulator"][terminal_name].resistances or {}
+            table.insert(data.raw["accumulator"][terminal_name].resistances, {
+                type = "warponium-damage",
+                percent = 100
+            })
         end
     end
 end
-]]
+

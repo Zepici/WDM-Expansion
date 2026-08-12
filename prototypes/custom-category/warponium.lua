@@ -10,5 +10,9 @@ return {
     {
         type = "resource-category",
         name = "warponium-hard-solid"
+    },
+    {
+        type = "ammo-category",
+        name = "overpower-tesla-gun"
     }
 }

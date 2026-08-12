@@ -17,6 +17,7 @@ local recipes = {
     type = "recipe",
     name = "pamk3-se",
     enabled = false,
+    auto_recycle = true,
     energy_required = 10,
     ingredients = {
       { type = "item", name = "steel-plate",               amount = 100 },

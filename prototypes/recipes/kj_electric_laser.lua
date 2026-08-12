@@ -2,7 +2,7 @@ local recipes = {
     {
         type = "recipe",
         name = "kj_electric_laser_player",
-        categories = {"advanced-crafting"},
+        category = "advanced-crafting",
         enabled = false,
         energy_required = 35,
         ingredients = {
@@ -12,6 +12,7 @@ local recipes = {
             { type = "item", name = "battery", amount = 50 }
         },
         results = { { type = "item", name = "kj_electric_laser_player", amount = 1 }, },
+        auto_recycle = false,
         order = "j",
     }    
 }
@@ -20,7 +21,7 @@ if mods["space-age"] then
     recipes["kj_electric_laser_player"] = {
         type = "recipe",
         name = "kj_electric_laser_player",
-        categories = {"advanced-crafting"},
+        category = "advanced-crafting",
         enabled = false,
         energy_required = 35,
         ingredients = {
@@ -30,6 +31,7 @@ if mods["space-age"] then
             { type = "item", name = "battery", amount = 50 }
         },
         results = { { type = "item", name = "kj_electric_laser_player", amount = 1 }, },
+        auto_recycle = false,
         order = "j",
     }  
 end     

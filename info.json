@@ -5,7 +5,7 @@
   "description": "Global expansion for the Warp-Drive-Machine! New events, unique weapons, reworked mechanics, and improved performance. Make your hyperspace travels deeper, more dangerous, and more exciting! Under development and may be unstable.",
   "homepage":"https://discord.gg/afNVt4zWzS",
   "author": "ZepCannon",
-  "factorio_version": "2.1",
+  "factorio_version": "2.0",
   "dependencies": [
     "base >= 2.0.72",
     "Warp-Drive-Machine >= 1.3.6",
@@ -13,7 +13,6 @@
     "AncientDrill",
     "? space-age",
     "? ZombieHordeFaction",
-    "? magnetic-storm",
     "? Krastorio2",
     "? Krastorio2-spaced-out",
     "(?) bobpower",

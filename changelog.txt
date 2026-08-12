@@ -1,5 +1,18 @@
 ---------------------------------------------------------------------------------------------------
-Version: 0.2.5
+Version: 0.3.1
+Date: 2026-08-12
+  Features:
+    - Conversion plant now supports connection to the logistics network.
+    - The "Magnetic Storm" mod has been integrated into the mod.
+    - Added "Frost Gland Cultivation" recipe for the "Frost Biters" mod.
+    - Added infinite frost damage upgrade technology for the "Frost Biters" mod.
+    - Added the "Ultra Tesla Gun" - powerful weapon that uses Warponium; it can only be found.
+  Balancing:
+    - The spaceship terminal health now increases based on its level.
+  Bugfixes:
+    - Fixed a bug that occurred when disabling the "Enable Alien Loot and Frost Warfare" setting in the Frost Biters mod settings.
+---------------------------------------------------------------------------------------------------
+Version: 0.3.0
 Date: 2026-07-16
   Changes:
     - Ported to factorio 2.1.

@@ -1084,6 +1084,11 @@ local RUINS_LOOT_POOL = {
     {name = "green-refined-concrete", min = 10, max = 50, chance = 0.025, min_threat = 0.7}
 }
 
+if has_active_mod("space-age") then
+    table.insert(RUINS_LOOT_POOL, {name = "wdm-overpower-tesla-gun", min = 1, max = 1, chance = 0.0125, min_threat = 0.5})
+    table.insert(RUINS_LOOT_POOL, {name = "wdm-overpower-tesla-ammo", min = 1, max = 5, chance = 0.025, min_threat = 0.5})
+end
+
 local function fill_ruins_loot(entities, current_threat)
     if not entities or #entities == 0 then return end
     current_threat = current_threat or 0
