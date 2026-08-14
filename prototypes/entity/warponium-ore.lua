@@ -1,4 +1,4 @@
-local resource_autoplace = require("resource-autoplace")
+-- local resource_autoplace = require("resource-autoplace")
 
 return {
 --[[
@@ -40,13 +40,13 @@ return {
         },
         collision_box = {{-0.1, -0.1}, {0.1, 0.1}},
         selection_box = {{-0.5, -0.5}, {0.5, 0.5}},
-        autoplace = resource_autoplace.resource_autoplace_settings{
-            name = "underground-warponium",
-            order = "z",
-            base_density = 10,
-            base_spots_per_km2 = 2.5,
-            has_fluid = false
-        },
+--        autoplace = resource_autoplace.resource_autoplace_settings{
+--            name = "underground-warponium",
+--            order = "z",
+--            base_density = 10,
+--            base_spots_per_km2 = 2.5,
+--            has_fluid = false
+--        },
         stages = {
             sheet = {
                 filename = "__Warp-Drive-Machine-Expansion__/graphics/entity/warponium-ore/ore5.png",
