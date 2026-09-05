@@ -83,18 +83,26 @@ if mods["Cold_biters"] and settings.startup["cb-enable-cold-warfare"] and settin
 end
 
 if not mods["Power-Armour-Replacer"] then
-data.raw["generator-equipment"]["pamk3-se"].power = "5MW"
-
-data.raw["technology"]["pamk3-pdd"].icons[1].icon = "__Warp-Drive-Machine-Expansion__/graphics/equipment/discharge-defense-equipment.png"
-data.raw["technology"]["pamk3-pdd"].icons[1].icon_size = 256
-
-data.raw["active-defense-equipment"]["pamk3-pdd"].sprite = {
-    filename = "__Warp-Drive-Machine-Expansion__/graphics/equipment/discharge-defense-equipment.png",
-    width = 256,
-    height = 256
-}
-data.raw["item"]["pamk3-pdd"].icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/discharge-defense-equipment.png"
-data.raw["active-defense-equipment"]["pamk3-pdd"].attack_parameters.range = 12
+    data.raw["generator-equipment"]["pamk3-se"].power = "5MW"
+    data.raw["technology"]["pamk3-pdd"].icons[1].icon = "__Warp-Drive-Machine-Expansion__/graphics/equipment/discharge-defense-equipment.png"
+    data.raw["technology"]["pamk3-pdd"].icons[1].icon_size = 256
+    data.raw["active-defense-equipment"]["pamk3-pdd"].sprite = {
+        filename = "__Warp-Drive-Machine-Expansion__/graphics/equipment/discharge-defense-equipment.png",
+        width = 256,
+        height = 256
+    }
+    data.raw["item"]["pamk3-pdd"].icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/discharge-defense-equipment.png"
+    data.raw["active-defense-equipment"]["pamk3-pdd"].attack_parameters.range = 12  
+end
+if not mods["Power-Armour-Replacer"] and (mods["Krastorio2"] or mods["Krastorio2-spaced-out"]) then
+    data.raw["technology"]["pamk3-pdd-mk2"].icons[1].icon = "__Warp-Drive-Machine-Expansion__/graphics/equipment/discharge-defense-mk2-equipment.png"
+    data.raw["technology"]["pamk3-pdd-mk2"].icons[1].icon_size = 256
+    data.raw["active-defense-equipment"]["pamk3-pdd-mk2"].sprite = {
+        filename = "__Warp-Drive-Machine-Expansion__/graphics/equipment/discharge-defense-mk2-equipment.png",
+        width = 256,
+        height = 256
+    }
+    data.raw["item"]["pamk3-pdd-mk2"].icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/discharge-defense-mk2-equipment.png"  
 end
 
 data.raw["ammo"]["kj_laser_normal"].ammo_type.action.range = 70
@@ -113,8 +121,6 @@ data.raw["artillery-turret"]["artillery-turret"].manual_range_modifier = 1.3
 data.raw["recipe"]["warponium-fluid"].energy_required = 50
 if mods["space-age"] then
     data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_per_shot = "0kJ"
-    data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_source.render_no_network_icon = false
-    data.raw["ammo-turret"]["wdm_pirate_railgun-turret"].energy_source.render_no_power_icon = false
 end
 table.insert(data.raw.wall["stone-wall"].resistances, {type = "electric", percent = 70})
 table.insert(data.raw.gate["gate"].resistances, {type = "electric", percent = 70})
@@ -376,7 +382,13 @@ if mods["Krastorio2"] or mods["Krastorio2-spaced-out"] then
     table.insert(data.raw.recipe["kr-energy-control-unit"].ingredients, {type = "item", name = "warponium-hypercube", amount = 1})
     table.insert(data.raw.recipe["warponium-solar-panel"].ingredients, {type = "item", name = "kr-glass", amount = 30})
     table.insert(data.raw.recipe["emergency-return"].ingredients, {type = "item", name = "kr-glass", amount = 5})
-    table.insert(data.raw.recipe["crystal-processing-t2"].results, {type = "item", name = "kr-imersium-plate", amount = 25}) 
+    table.insert(data.raw.recipe["crystal-processing-t2"].results, {type = "item", name = "kr-imersium-plate", amount = 25})
+    table.insert(data.raw.recipe["kj_electric_laser_player"].ingredients, {type = "item", name = "kr-rare-metals", amount = 20})
+    table.insert(data.raw.recipe["kr-advanced-fuel"].ingredients, {type = "fluid", name = "warponium-fluid", amount = 10})
+    table.insert(data.raw.technology["kr-advanced-fuel"].prerequisites, "wdm_warponium_fuel")
+    data.raw["gun"]["kr-heavy-rocket-launcher"].attack_parameters.range = 75
+    data.raw["gun"]["kr-advanced-tank-cannon-c"].attack_parameters.range = 100
+    data.raw["gun"]["kr-dolphin-gun"].attack_parameters.range = 80
 end
 
 if (mods["Krastorio2"] or mods["Krastorio2-spaced-out"]) and not mods["Power-Armour-Replacer"] then
@@ -400,6 +412,7 @@ if (mods["Krastorio2"] or mods["Krastorio2-spaced-out"]) and not mods["Power-Arm
     for _, ing in ipairs(data.raw["recipe"]["exoskeleton-mk2-equipment"].ingredients) do
         if ing.name == "exoskeleton-equipment" then
             ing.name = "kr-advanced-exoskeleton-equipment"
+            ing.amount = 1
             break
         end
     end
