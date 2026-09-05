@@ -6,8 +6,7 @@ local technologies = {
     icon = "__Warp-Drive-Machine-Expansion__/graphics/pamk3/technology/pamk3-esmk3.png",
     icons = util.technology_icon_constant_equipment("__Warp-Drive-Machine-Expansion__/graphics/pamk3/technology/pamk3-esmk3.png"),
     icon_size = 256,
-    prerequisites = {"energy-shield-mk2-equipment", "power-armor-mk2",
-  },
+    prerequisites = { "energy-shield-mk2-equipment", "power-armor-mk2" },
     effects =
     {
       {
@@ -126,6 +125,61 @@ if mods["space-age"] then
       }
     end
   end
+end
+
+if mods["Krastorio2-spaced-out"] then
+  table.insert(technologies, {
+    type = "technology",
+    name = "pamk3-pdd-mk2",
+    icons = util.technology_icon_constant_equipment("__base__/graphics/technology/discharge-defense-equipment.png"),
+    icon_size = 256,
+    prerequisites = {"pamk3-pdd", "kr-advanced-tech-card", "mech-armor"},
+    effects =
+    {
+      {
+        type = "unlock-recipe",
+        recipe = "pamk3-pdd-mk2"
+      }
+    },
+    unit =
+    {
+      count = 450,
+      ingredients =
+      {
+        {"utility-science-pack", 1},
+        {"space-science-pack", 1},
+        {"kr-advanced-tech-card", 1},
+        {"electromagnetic-science-pack", 1}
+      },
+      time = 75
+    }
+  })
+elseif mods["Krastorio2"] then
+  table.insert(technologies, {
+    type = "technology",
+    name = "pamk3-pdd-mk2",
+    icons = util.technology_icon_constant_equipment("__base__/graphics/technology/discharge-defense-equipment.png"),
+    icon_size = 256,
+    prerequisites = {"pamk3-pdd", "kr-military-5", "kr-advanced-tech-card", "warponium-hypercube"},
+    effects =
+    {
+      {
+        type = "unlock-recipe",
+        recipe = "pamk3-pdd-mk2"
+      }
+    },
+    unit =
+    {
+      count = 450,
+      ingredients =
+      {
+        {"utility-science-pack", 1},
+        {"space-science-pack", 1},
+        {"kr-advanced-tech-card", 1}
+      },
+      time = 75
+    }
+  })
 end
 
 return technologies

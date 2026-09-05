@@ -1,6 +1,7 @@
 local item_sounds = require("__base__.prototypes.item_sounds")
 
-return {
+-- Создаем локальную таблицу с базовыми предметами
+local items = {
   {
     type = "item",
     name = "pamk3-esmk3",
@@ -13,7 +14,7 @@ return {
     pick_sound = item_sounds.energy_shield_inventory_pickup,
     drop_sound = item_sounds.energy_shield_inventory_move,
     stack_size = 10,
-    weight = 150*kg
+    weight = 150 * kg
   },
   {
     type = "item",
@@ -27,7 +28,7 @@ return {
     pick_sound = item_sounds.reactor_inventory_pickup,
     drop_sound = item_sounds.reactor_inventory_move,
     stack_size = 10,
-    weight = 1 * tons,
+    weight = 1 * tons
   },
   {
     type = "item",
@@ -44,7 +45,7 @@ return {
     pick_sound = item_sounds.reactor_inventory_pickup,
     drop_sound = item_sounds.reactor_inventory_move,
     stack_size = 1,
-    weight = 1 * tons,
+    weight = 1 * tons
   },
   {
     type = "item",
@@ -57,6 +58,25 @@ return {
     pick_sound = item_sounds.electric_large_inventory_pickup,
     drop_sound = item_sounds.electric_large_inventory_move,
     stack_size = 20,
-    weight = 250*kg
+    weight = 250 * kg
   }
 }
+
+if mods["Krastorio2"] or mods["Krastorio2-spaced-out"] then
+  table.insert(items, {
+    type = "item",
+    name = "pamk3-pdd-mk2",
+    icon = "__base__/graphics/icons/discharge-defense-equipment.png",
+    icon_size = 64,
+    place_as_equipment_result = "pamk3-pdd-mk2",
+    subgroup = "military-equipment",
+    order = "b[active-defense]-c[passive-discharge-defense-equipment]-b[equipment-mk2]",
+    inventory_move_sound = item_sounds.electric_large_inventory_move,
+    pick_sound = item_sounds.electric_large_inventory_pickup,
+    drop_sound = item_sounds.electric_large_inventory_move,
+    stack_size = 20,
+    weight = 300 * kg
+  })
+end
+
+return items

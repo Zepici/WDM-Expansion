@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.3.3
+Date: 2026-09-05
+  Compatibility:
+    - Weapons reworked for the "Krastorio 2" mod.
+  Bugfixes:
+    - Fixed an unknown crash related to the Pirate Railgun upon launching the mod.
+---------------------------------------------------------------------------------------------------
 Version: 0.3.2
 Date: 2026-08-14
   Bugfixes:

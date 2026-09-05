@@ -75,4 +75,37 @@ if mods["space-age"] then
   end
 end
 
+if mods["Krastorio2-spaced-out"] then
+  table.insert(recipes, {
+    type = "recipe",
+    name = "pamk3-pdd-mk2",
+    enabled = false,
+    energy_required = 15,
+    ingredients = {
+      { type = "item", name = "pamk3-pdd", amount = 1 }, 
+      { type = "item", name = "kr-lithium-sulfur-battery", amount = 10 },
+      { type = "item", name = "kr-imersium-beam", amount = 10 },
+      { type = "item", name = "warponium-plate", amount = 100 },
+      { type = "item", name = "superconductor", amount = 25 }      
+    },
+    results = { { type = "item", name = "pamk3-pdd-mk2", amount = 1 } }
+  })
+elseif mods["Krastorio2"] then
+  table.insert(recipes, {
+    type = "recipe",
+    name = "pamk3-pdd-mk2",
+    enabled = false,
+    energy_required = 10,
+    ingredients = {
+      { type = "item", name = "pamk3-pdd", amount = 1 }, 
+      { type = "item", name = "kr-lithium-sulfur-battery", amount = 10 },
+      { type = "item", name = "kr-imersium-beam", amount = 10 },
+      { type = "item", name = "warponium-plate", amount = 100 },
+      { type = "item", name = "warponium-hypercube", amount = 5 }
+    },
+    results = { { type = "item", name = "pamk3-pdd-mk2", amount = 1 } }
+  })
+end
+
+
 return recipes
