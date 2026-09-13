@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.3.4
+Date: 2026-09-13
+  Features:
+    - The calculation of the distance from the ship for event spawning now processes floor growth data from the WDM settings.
+  Bugfixes:
+    - Fixed a crash when launching the game with the "Krastorio 2" mod on Factorio version 2.0.
+---------------------------------------------------------------------------------------------------
 Version: 0.3.3
 Date: 2026-09-05
   Compatibility:

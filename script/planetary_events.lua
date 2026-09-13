@@ -1563,15 +1563,19 @@ local function get_gas_leak_radius_by_tech(force, surface)
 end
 
 -- Вычисляет min/max дистанции спавна по уровню технологии и опциональному модификатору
+local BASE_BY_LEVEL = {80, 92, 102, 111, 119, 126, 132, 137, 141}
 local function compute_spawn_distance_range_by_tech(force, opts)
-    opts = opts or {}
-    local base_by_level = {80, 92, 102, 111, 119, 126, 132, 137, 141}
+    local spawn_mod = opts and opts.spawn_distance_modifier
+    local dist_mod = opts and opts.distance_modifier
+    local setting_value = settings.global["wdm-ship_size_increment"].value or 12
+    local setting_scale = setting_value / 12
     local lvl = get_ship_floor_size_tech_level(force) or 0
-    local base_min = base_by_level[lvl + 1] or 80
-    local modifier = tonumber(opts.spawn_distance_modifier) or tonumber(opts.distance_modifier) or 1
+    local base_min = BASE_BY_LEVEL[lvl + 1] or BASE_BY_LEVEL[#BASE_BY_LEVEL]
+    base_min = base_min * setting_scale
+    local modifier = tonumber(spawn_mod) or tonumber(dist_mod) or 1
     if modifier <= 0 then modifier = 1 end
     local min_dist = math.floor(base_min * modifier)
-    local max_dist = math.floor(min_dist * 3)
+    local max_dist = min_dist * 3
     return min_dist, max_dist
 end
 
@@ -1804,12 +1808,8 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
 
         local radial_offset = (i - 1) * (opts.spacing or 60)
         local min_dist, max_dist
-        if opts.min_dist or opts.max_dist then
-            min_dist = opts.min_dist or 100
-            max_dist = opts.max_dist or (min_dist * 2)
-        else
-            min_dist, max_dist = compute_spawn_distance_range_by_tech(force, opts)
-        end
+        min_dist, max_dist = compute_spawn_distance_range_by_tech(force, opts)
+        
         local pos = find_spawn_position_near_ship(ship, surface, min_dist + radial_offset, max_dist + radial_offset, spawn_prototype)
         if not pos then
             debug("Failed to find non-water spawn position for prototype=" .. tostring(spawn_prototype))
@@ -3332,12 +3332,8 @@ spawn_crystals = function(surface, count, center_pos, blocked_zone, announce_in_
         local pos
         -- use tech-based distances for crystals; center_pos means spawn around ship center
         local min_d, max_d
-        if opts.min_dist or opts.max_dist then
-            min_d = opts.min_dist or 50
-            max_d = opts.max_dist or (min_d + 200)
-        else
-            min_d, max_d = compute_spawn_distance_range_by_tech(force, opts)
-        end
+        min_d, max_d = compute_spawn_distance_range_by_tech(force, opts)
+        
         local angle = math.random() * math.pi * 2
         local dist = min_d + (math.random() * (max_d - min_d))
         if center_pos then
