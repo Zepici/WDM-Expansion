@@ -390,6 +390,9 @@ if mods["Krastorio2"] or mods["Krastorio2-spaced-out"] then
     table.insert(data.raw.technology["kr-advanced-fuel"].prerequisites, "wdm_warponium_fuel")
     data.raw["gun"]["kr-heavy-rocket-launcher"].attack_parameters.range = 75
     data.raw["gun"]["kr-advanced-tank-cannon-c"].attack_parameters.range = 100
+end
+
+if mods["Krastorio2"] then
     data.raw["gun"]["kr-dolphin-gun"].attack_parameters.range = 80
 end
 
