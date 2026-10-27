@@ -14757,7 +14757,7 @@
           "optional": true
         },
         {
-          "name": "fuel_category",
+          "name": "fuel_categories",
           "order": 9,
           "description": "Must exist when a nonzero fuel_value is defined.",
           "override": false,
@@ -14765,7 +14765,7 @@
           "optional": true,
           "default": {
             "complex_type": "literal",
-            "value": ""
+            "value": {}
           }
         },
         {

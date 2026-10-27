@@ -31,6 +31,9 @@ utils.add_data(require("prototypes.items.modified"))
 utils.add_data(require("prototypes.other.sounds"))
 utils.add_data(require("prototypes.other.explosions"))
 
+-- Радиация
+utils.add_data(require("prototypes.other.radiation"))
+
 -- Панелька
 utils.add_data(require("prototypes.entity.warponium-solar-panel"))
 utils.add_data(require("prototypes.items.warponium-solar-panel"))

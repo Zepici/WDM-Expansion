@@ -539,3 +539,58 @@ if mods["space-age"] then
     end
 end
 
+local pirate_sniper_patterns = {
+    "pirate_sniper",
+    "pirate_boss_sniper"
+}
+
+local function is_pirate_sniper(prototype_name)
+    if type(prototype_name) ~= "string" then return false end
+
+    for _, pattern in ipairs(pirate_sniper_patterns) do
+        if string.find(prototype_name, pattern, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+for prototype_name, prototype in pairs(data.raw["unit"] or {}) do
+    if is_pirate_sniper(prototype_name) then
+        local attack = prototype.attack_parameters
+        if attack then
+            if type(attack.range) == "number" then
+                attack.range = attack.range * 0.85
+            end
+            if type(attack.cooldown) == "number" then
+                attack.cooldown = attack.cooldown * 0.95
+            end
+        end
+    end
+end
+
+local reduced_health_boss_patterns = {
+    "maf-boss-frost-biter",
+    "maf-boss-explosive-biter",
+    "maf-boss-arachnid-biter"
+}
+
+local function is_reduced_health_boss(prototype_name)
+    if type(prototype_name) ~= "string" then return false end
+
+    for _, pattern in ipairs(reduced_health_boss_patterns) do
+        if string.find(prototype_name, pattern, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+for prototype_name, prototype in pairs(data.raw["unit"] or {}) do
+    if is_reduced_health_boss(prototype_name) and type(prototype.max_health) == "number" then
+        prototype.max_health = prototype.max_health * 0.8
+    end
+end
+

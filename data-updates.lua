@@ -125,7 +125,7 @@ if mods["ZombieHordeFaction"] then
         local unit = data.raw.unit[name]
         
         if unit and unit.max_health then
-            unit.max_health = unit.max_health / 2
+            unit.max_health = unit.max_health / 2.5
         end
     end
 end

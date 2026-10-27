@@ -105,6 +105,7 @@ if not mods["Power-Armour-Replacer"] and (mods["Krastorio2"] or mods["Krastorio2
     data.raw["item"]["pamk3-pdd-mk2"].icon = "__Warp-Drive-Machine-Expansion__/graphics/icon/discharge-defense-mk2-equipment.png"  
 end
 
+data.raw["container"]["wdm_destroyed_terminal"].max_health = 5000
 data.raw["ammo"]["kj_laser_normal"].ammo_type.action.range = 70
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.range = 70
 data.raw["electric-turret"]["kj_electric_laser"].attack_parameters.ammo_type.action.width = 6

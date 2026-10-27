@@ -43,7 +43,13 @@ local function gui_tick_handler()
             
             local cooldown_remaining = ship_abilities.get_ability_cooldown_remaining(force_name, ability_name)
             local was_cd = element_refs.was_cooldown
-            local changed = (is_unlocked ~= was_unlocked) or (cooldown_remaining ~= was_cd)
+            -- Для reactor_boost стоимость динамическая (зависит от числа реакторов),
+            -- для остальных — фиксированная из конфига
+            local fluid_cost = config.cost_per_reactor
+                and ship_abilities.get_ability_fluid_cost(force, ability_name)
+                or (config.cost_fluid or 0)
+            local was_cost = element_refs.was_fluid_cost
+            local changed = (is_unlocked ~= was_unlocked) or (cooldown_remaining ~= was_cd) or (fluid_cost ~= was_cost)
             
             -- Пропускаем, если ничего не изменилось
             if not changed then
@@ -53,6 +59,7 @@ local function gui_tick_handler()
             -- Обновляем кеш
             element_refs.was_unlocked = is_unlocked
             element_refs.was_cooldown = cooldown_remaining
+            element_refs.was_fluid_cost = fluid_cost
             
             -- Обновляем видимость строки
             local row_frame = element_refs.row_frame
@@ -128,6 +135,11 @@ local function gui_tick_handler()
                         uses_label.style.font_color = {r = 0.4, g = 0.9, b = 0.4}
                     end
                 end
+            end
+            
+            local cost_label = element_refs.cost_label
+            if cost_label and cost_label.valid then
+                cost_label.caption = {"", {"wdm-expansion.warponium-cost-label"}, "[font=default-bold][color=purple]: ", fluid_cost, "[/color][/font]"}
             end
             
             ::continue_ability::
@@ -359,9 +371,11 @@ function ship_abilities_gui.open_console(player, console_entity)
         controls_flow.style.horizontal_align = "right"
         controls_flow.style.vertical_spacing = 4
         
-        controls_flow.add({
-            type = "label", 
-            caption = {"", {"wdm-expansion.warponium-cost-label"}, "[font=default-bold][color=purple]: ", config.cost_fluid, "[/color][/font]"}
+        local fluid_cost = ship_abilities.get_ability_fluid_cost(player.force, ability_name)
+        local cost_label = controls_flow.add({
+            type = "label",
+            name = "wdm-cost-label-" .. ability_name,
+            caption = {"", {"wdm-expansion.warponium-cost-label"}, "[font=default-bold][color=purple]: ", fluid_cost, "[/color][/font]"}
         })
         
         -- Лейбл кулдауна (всегда создаётся для автообновления)
@@ -429,9 +443,11 @@ function ship_abilities_gui.open_console(player, console_entity)
             button = button,
             cd_label = cd_label,
             uses_label = uses_label,
+            cost_label = cost_label,
             row_frame = row_frame,
             was_unlocked = is_unlocked,
-            was_cooldown = cooldown_remaining
+            was_cooldown = cooldown_remaining,
+            was_fluid_cost = fluid_cost
         }
     end
     

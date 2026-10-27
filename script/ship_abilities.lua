@@ -48,7 +48,8 @@ local ABILITIES_CONFIG = {
         name = "reactor_boost",
         localised_name = {"wdm-expansion.ship-ability-reactor-boost"},
         localised_desc = {"wdm-expansion.ship-ability-reactor-boost-description"},
-        cost_fluid = 1500,
+        cost_fluid = 1000,
+        cost_per_reactor = 80,
         cooldown_ticks = 15 * 60 * 60,
         tech_required = "wdm-ship-ability-reactor-boost",
         max_uses_per_warp = 2
@@ -636,6 +637,29 @@ local function activate_waste_recycler(force, all_surfaces)
     return true
 end
 
+local function count_reactors(force, all_surfaces)
+    if not (force and force.valid and all_surfaces) then return 0 end
+    local total = 0
+    for _, surface in pairs(all_surfaces) do
+        if surface and surface.valid then
+            for _ in pairs(surface.find_entities_filtered({type = "reactor", force = force})) do
+                total = total + 1
+            end
+        end
+    end
+    return total
+end
+
+-- Для reactor_boost: базовая фиксированная цена + cost_per_reactor * количество реакторов.
+-- Для остальных способностей фиксированная.
+local function get_ability_fluid_cost(ability_config, force, all_surfaces)
+    if not ability_config then return 0 end
+    if ability_config.cost_per_reactor then
+        return (ability_config.cost_fluid or 0) + ability_config.cost_per_reactor * count_reactors(force, all_surfaces)
+    end
+    return ability_config.cost_fluid or 0
+end
+
 local function check_reactor_boost(force, all_surfaces)
     if not (force and force.valid and all_surfaces) then return false end
     for _, surface in pairs(all_surfaces) do
@@ -1100,12 +1124,12 @@ function ship_abilities.on_gui_click(event)
         end
     end
     
-    -- Проверяем ресурсы
-    if ability_config.cost_fluid then
+    local fluid_cost = get_ability_fluid_cost(ability_config, force, all_surfaces)
+    if fluid_cost > 0 then
         local has_fluid = false
         local resource_surface = nil
         for _, s in pairs(all_surfaces) do
-            local ok, tank = has_warponium_fluid(s, ability_config.cost_fluid)
+            local ok, tank = has_warponium_fluid(s, fluid_cost)
             if ok then
                 has_fluid = true
                 resource_surface = s
@@ -1116,7 +1140,7 @@ function ship_abilities.on_gui_click(event)
             player.print({"wdm-expansion.ship-not-enough-warponium"})
             return
         end
-        consume_warponium_fluid(resource_surface, ability_config.cost_fluid)
+        consume_warponium_fluid(resource_surface, fluid_cost)
         debug("[ship_abilities] Consumed resources from: " .. resource_surface.name)
     end
     
@@ -1192,6 +1216,29 @@ function ship_abilities.get_ability_uses_remaining(force_name, ability_name)
     if not config or not config.max_uses_per_warp then return nil end
     local uses = state.ability_uses[ability_name] or 0
     return config.max_uses_per_warp - uses
+end
+
+function ship_abilities.get_ability_fluid_cost(force, ability_name)
+    local config = ABILITIES_CONFIG[ability_name]
+    if not (config and force and force.valid) then return 0 end
+    if not config.cost_per_reactor then return config.cost_fluid or 0 end
+
+    local all_surfaces = {}
+    local state = get_force_state(force.name)
+    if state.ship_surfaces and #state.ship_surfaces > 0 then
+        for _, s in pairs(state.ship_surfaces) do
+            if s and s.valid then all_surfaces[s.name] = s end
+        end
+    end
+    if not next(all_surfaces) then
+        for _, s in pairs(game.surfaces) do
+            if s and s.valid and string.match(s.name, "^ship_interior") then
+                all_surfaces[s.name] = s
+            end
+        end
+    end
+
+    return (config.cost_fluid or 0) + config.cost_per_reactor * count_reactors(force, all_surfaces)
 end
 
 function ship_abilities.set_resource_collector_target(force_name, entity)

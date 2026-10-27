@@ -1,6 +1,6 @@
 local mind_control = {}
 
-local CONTROL_DURATION = 15 * 60
+local CONTROL_DURATION = 10 * 60
 local ENEMY_SPAWN_INTERVAL = 9999
 local CONTROL_EFFECT_ID = "wdm-mind-control-effect"
 local TICK_HANDLER_REGISTERED = false
@@ -292,12 +292,14 @@ local function on_nth_tick(event)
 
                 local min_dist = 999999
                 local target_char = nil
+                local char_surface = character.surface
 
                 for _, p in pairs(connected_players) do
                     if
                         p.index ~= player_index and
                         p.character and
                         p.character.valid and
+                        p.character.surface == char_surface and
                         not storage.mind_controlled_players[p.index]
                     then
                         local p_pos = p.character.position
@@ -326,7 +328,7 @@ local function on_nth_tick(event)
 
                     if #structures > 0 then
                         control_data.last_target_pos =
-                            structures.position
+                            structures[1].position
                     end
                 end
             end
@@ -491,11 +493,13 @@ local function on_nth_tick(event)
 
                 local min_dist = 999999
                 local target_ent = nil
+                local spider_surface = spider.surface
 
                 for _, p in pairs(connected_players) do
                     if
                         p.character and
                         p.character.valid and
+                        p.character.surface == spider_surface and
                         not storage.mind_controlled_players[p.index]
                     then
                         local p_pos = p.character.position
@@ -524,7 +528,7 @@ local function on_nth_tick(event)
 
                     if #structures > 0 then
                         control_data.last_target_pos =
-                            structures.position
+                            structures[1].position
                     end
                 end
             end
@@ -632,11 +636,13 @@ local function on_nth_tick(event)
 
                 local min_dist = 999999
                 local target_ent = nil
+                local car_surface = car.surface
 
                 for _, p in pairs(connected_players) do
                     if
                         p.character and
                         p.character.valid and
+                        p.character.surface == car_surface and
                         not storage.mind_controlled_players[p.index]
                     then
                         local p_pos = p.character.position
@@ -665,7 +671,7 @@ local function on_nth_tick(event)
 
                     if #structures > 0 then
                         control_data.last_target_pos =
-                            structures.position
+                            structures[1].position
                     end
                 end
             end

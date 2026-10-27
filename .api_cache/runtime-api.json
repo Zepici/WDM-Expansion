@@ -34546,7 +34546,7 @@
           "optional": false
         },
         {
-          "name": "fuel_category",
+          "name": "fuel_categories",
           "order": 5,
           "description": "The fuel category, if any.",
           "read_type": "string",

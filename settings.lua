@@ -33,6 +33,19 @@ data:extend({
     setting_type = "startup",
     default_value = false,
     order = "e"
+  },
+  {
+    type = "string-setting",
+    name = "wdm-expansion-event-notify-level",
+    setting_type = "runtime-global",
+    default_value = "full",
+    allowed_values = {
+      "full",
+      "reduced",
+      "danger",
+      "none"
+    },
+    order = "f"
   }
 })
 
@@ -43,7 +56,7 @@ if mods["ZombieHordeFaction"] then
       name = "wdm-expansion-zombie",
       setting_type = "startup",
       default_value = true,
-      order = "f"
+      order = "g"
     }
   })
 end

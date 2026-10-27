@@ -55,7 +55,7 @@ return {
       apply_projection = false,
       frame_count = 32,
       line_length = 8,
-      animation_speed = 0.28,
+      animation_speed = 0.25,
       shift = {0, 0}
     },
   }

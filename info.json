@@ -1,6 +1,6 @@
 {
   "name": "Warp-Drive-Machine-Expansion",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "title": "Warp Drive Machine Expansion",
   "description": "Global expansion for the Warp-Drive-Machine! New events, unique weapons, reworked mechanics, and improved performance. Make your hyperspace travels deeper, more dangerous, and more exciting! Under development and may be unstable.",
   "homepage":"https://discord.gg/afNVt4zWzS",
@@ -16,6 +16,7 @@
     "? Krastorio2",
     "? Krastorio2-spaced-out",
     "(?) bobpower",
+    "(?) Power-Armour-Replacer >= 0.6.9",
     "! Power Armor MK3"
   ]
 }

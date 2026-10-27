@@ -371,7 +371,7 @@ return {
     attack_parameters = {
       type = "beam",
       ammo_category = "biological",
-      cooldown = 900,
+      cooldown = 660,
       range = 40,
       damage_modifier = 1.5 * damage_multiplier,
       warmup = 0,

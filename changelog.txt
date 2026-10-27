@@ -1,4 +1,25 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.3.5
+Date: 2026-10-26
+  Major Features:
+    - Added new event: "Radiation Background".
+      - Radioactive ground patches slow movement, damage characters standing on them and can mutate biters and spitters into stronger variants.
+  Features:
+    - Added "Event Notification Level" setting with Full, Reduced, Danger only and None options.
+  Ease of use:
+    - Exocine crystal discoveries are now reported in a single message with all GPS tags.
+  Balancing:
+    - Ship ability "Reactor Overdrive" now costs 1000 warponium plus 80 per reactor instead of a fixed 1500.
+    - Reduced pirate sniper range by 15% and increased their fire rate by 5%.
+    - Reduced the maximum health of Frost, Explosive and Arachnid biter bosses by 20%.
+    - Reduced the duration of mind control from 15 to 10 sec.
+    - Increased the Psi-Overlord fire rate by reducing cooldown from 15 to 11 sec.
+    - Exocine crystal damage bonus now decays 40% faster during warps.
+    - Increased the max HP of the destroyed terminal from 1000 to 5000.
+  Bugfixes:
+    - Fixed a startup crash on Factorio 2.1.20 or newer.
+    - Fixed some issues with mind control logic in multiplayer.
+---------------------------------------------------------------------------------------------------
 Version: 0.3.4
 Date: 2026-09-13
   Features:

@@ -8,6 +8,14 @@ end
 local HAS_SPACE_AGE = has_active_mod("space-age")
 local HAS_ZOMBIE_HORDE = has_active_mod("ZombieHordeFaction")
 
+-- Radioactive background event
+local RADIOACTIVE_TILE = "wdm-radioactive-ground"
+local RADIATION_DAMAGE_TYPE = "radiation"
+
+if has_active_mod("Krastorio2-spaced-out") or has_active_mod("Krastorio2") then
+    RADIATION_DAMAGE_TYPE = "kr-radioactive"
+end
+
 -- ============================================================
 -- КОНСТАНТЫ И КОНФИГУРАЦИЯ
 -- ============================================================
@@ -200,6 +208,40 @@ local DEFAULT_EVENTS = {
             {name = "stone-brick", count_min = 30, count_max = 120},
             {name = "plastic-bar", count_min = 40, count_max = 160}
         }
+    },
+    radiation_background = {
+        -- WDM planet event parameters
+        wdm_chance = 0.06,
+        wdm_min_wap = 50,
+        wdm_min_tech_progress = 0.1,
+        wdm_no_repeat = true,
+        wdm_requires_enemies = true,
+        wdm_can_be_removed = false,
+        wdm_difficulty_add = 0.0,
+        wdm_alarm = true,
+        -- Internal config
+        action_name = "radiation_background",
+
+        patch_count_min = 3,
+        patch_count_max = 6,
+        patch_threat_bonus = 2,
+        patch_length_min = 60,
+        patch_length_max = 140,
+        patch_width_min = 6,
+        patch_width_max = 14,
+        patch_wiggle = 0.5,
+
+        spawn_distance_modifier = 1,
+
+        chunk_spawn_chance = 0.05,
+        chunk_cluster_min = 2,
+        chunk_cluster_max = 3,
+
+        mutation_chance = 0.10,
+
+        damage_per_second = 8,
+        damage_threat_multiplier = 1.0,
+        tech_influence = 0.5
     }
 }
 
@@ -262,6 +304,58 @@ local function debug(msg)
     log("[WDM Expansion DEBUG] " .. msg)
     for _, p in pairs(game.connected_players) do
         p.print("[WDM Expansion DEBUG] " .. msg)
+    end
+end
+
+-- ============================================================
+-- УРОВНИ УВЕДОМЛЕНИЙ О СОБЫТИЯХ
+-- Настраиваются через "wdm-expansion-event-notify-level":
+--   full     - все уведомления о событиях (как раньше)
+--   reduced  - меньше уведомлений (опасности, начала событий, добыча кристаллов, персональные)
+--   danger   - только опасности/негативные эффекты (газовая утечка, сверхкрупные формы жизни, лазерный босс, добыча кристаллов)
+--   none     - уведомления о событиях отключены
+-- Категории уведомлений:
+--   danger   - опасности и негативные эффекты, требующие реакции игрока (газовая утечка,
+--              сверхкрупные формы жизни, лазерный босс; добыча кристалла, повышающая угрозу)
+--   start    - начало события (землетрясение, потерянная палуба, магнитная буря, рост кристаллов)
+--   info     - второстепенные/завершающие сообщения (конец события, руины, пинги кристаллов)
+--   personal - персональные сообщения конкретному игроку (телепортация с потерянной палубы)
+-- ============================================================
+local NOTIFY_LEVEL_FULL = "full"
+local NOTIFY_LEVEL_REDUCED = "reduced"
+local NOTIFY_LEVEL_DANGER = "danger"
+local NOTIFY_LEVEL_NONE = "none"
+
+local function get_event_notify_level()
+    local setting = settings.global and settings.global["wdm-expansion-event-notify-level"]
+    if setting then return setting.value end
+    return NOTIFY_LEVEL_FULL
+end
+
+local function is_notification_hidden(category)
+    local level = get_event_notify_level()
+    if level == NOTIFY_LEVEL_NONE then return true end
+    if level == NOTIFY_LEVEL_FULL then return false end
+    if level == NOTIFY_LEVEL_DANGER then
+        return category ~= "danger"
+    end
+    if level == NOTIFY_LEVEL_REDUCED then
+        return not (category == "danger" or category == "start" or category == "personal")
+    end
+    return false
+end
+
+-- Глобальное уведомление всех игроков с учётом уровня уведомлений
+local function notify_all(category, localised)
+    if is_notification_hidden(category) then return end
+    if game then game.print(localised) end
+end
+
+-- Персональное уведомление игрока с учётом уровня уведомлений
+local function notify_player(player, category, localised)
+    if is_notification_hidden(category) then return end
+    if player and player.valid then
+        player.print(localised)
     end
 end
 
@@ -769,6 +863,7 @@ local function init_event_storage()
     storage.enemy_biological_damage_bonus = storage.enemy_biological_damage_bonus or 0
     storage.pirate_humanoid_damage_bonus = storage.pirate_humanoid_damage_bonus or 0
     storage.gas_leak_active = storage.gas_leak_active or {} -- [surface_index] = {active=true, clouds_count=0, growth_tick=0, repair_bounty=nil}
+    storage.radiation_active = storage.radiation_active or {} -- [surface_index] = {active=true, damage=<dmg per second>}
 end
 
 local function is_surface_event_repeat_persistent(event_name)
@@ -1848,8 +1943,7 @@ local function spawn_laser_boss_far_entity(ship, surface, prototype, count, opts
                     position = boss.position
                 }
             end)
-            -- localized print with gps ping
-            game.print({ "wdm-expansion.laser_boss_spawned", boss.gps_tag })
+            notify_all("danger", { "wdm-expansion.laser_boss_spawned", boss.gps_tag }) -- localized print with gps ping
         else
             debug("Failed to create boss entity at (" .. tostring(pos.x) .. "," .. tostring(pos.y) .. ") (ok=" .. tostring(ok) .. ") prototype=" .. tostring(spawn_prototype))
         end
@@ -1945,7 +2039,7 @@ local function handle_custom_planet_event(event_name, ship, surface)
         local delay_ticks = seconds * 60
         
         -- Broadcast detected message
-        game.print({ "wdm-expansion.laser_boss_detected" })
+        notify_all("danger", { "wdm-expansion.laser_boss_detected" })
         debug("laser_boss will be scheduled after " .. tostring(seconds) .. " seconds (" .. tostring(delay_ticks) .. " ticks)")
 
         local wmin = (ev.waves and ev.waves.min) or 1
@@ -2086,7 +2180,7 @@ ACTIONS.ruins = function(surface, ev, ship_stub, meta)
     -- Включаем обработчик генерации чанков для спавна руин
     sync_chunk_generated_handler()
 
-    game.print({ "wdm-expansion.ruins_discovered", surface.name })
+    notify_all("info", { "wdm-expansion.ruins_discovered", surface.name })
     debug("Ruins event activated on surface " .. tostring(surface.name) .. ". Triggering force: " .. tostring(force_name))
 end
 
@@ -2151,7 +2245,7 @@ ACTIONS.earthquake = function(surface, ev, ship_stub, meta)
         end
     end
 
-    game.print({ "wdm-expansion.earthquake_started", surface.name, duration_seconds })
+    notify_all("start", { "wdm-expansion.earthquake_started", surface.name, duration_seconds })
     --pcall(function() surface.play_sound{ path = "", volume_modifier = 0.8 } end)
 
     debug("Earthquake started on surface " .. tostring(surface_index) .. ", affected " .. tostring(table_size(eq_data.affected_players)) .. " players, ends at tick " .. tostring(eq_data.end_tick) .. ", threat=" .. string.format("%.3f", t.threat))
@@ -2235,12 +2329,12 @@ ACTIONS.lost_deck = function(surface, ev, ship_stub, meta)
     for _, player in pairs(game.connected_players) do
         if player.surface and player.surface.valid and player.surface.index == target.index then
             local teleported = teleport_player_to_available_deck(player)
-            if teleported then player.print({ "wdm-expansion.lost_deck_teleported" }) end
+            if teleported then notify_player(player, "personal", { "wdm-expansion.lost_deck_teleported" }) end
         end
     end
 
     local minutes = math.ceil(duration_seconds / 60)
-    game.print({ "wdm-expansion.lost_deck_started", target.name, minutes })
+    notify_all("start", { "wdm-expansion.lost_deck_started", target.name, minutes })
     debug("lost_deck started on " .. tostring(target.name) .. " for " .. tostring(duration_seconds) .. "s")
 end
 
@@ -2510,7 +2604,7 @@ ACTIONS.electromagnetic_storm = function(surface, ev, ship_stub, meta)
     if update_tick_handlers then update_tick_handlers() end
 
     local active_seconds = math.max(1, math.ceil((display_end_tick - game.tick) / 60))
-    game.print({ "wdm-expansion.electromagnetic_storm_started"})
+    notify_all("start", { "wdm-expansion.electromagnetic_storm_started" })
     debug("electromagnetic_storm started on " .. tostring(applied_count) .. " surfaces; value=" .. tostring(display_value) .. " duration=" .. tostring(active_seconds) .. "s threat=" .. string.format("%.3f", t.threat), display_surface_name, display_value, active_seconds)
 end
 
@@ -2533,7 +2627,7 @@ ACTIONS.crystal_overgrowth = function(surface, ev, ship_stub, meta)
         force = force,
         spawn_distance_modifier = ev.spawn_distance_modifier or (ev.spawn_opts and ev.spawn_opts.spawn_distance_modifier) or 1
     }
-    game.print({ "wdm-expansion.crystal_overgrowth_started", surface.name })
+    notify_all("start", { "wdm-expansion.crystal_overgrowth_started", surface.name })
     spawn_crystals(surface, cfg.initial_count or 8, center, nil, true, spawn_opts)
     storage.crystal_overgrowth_active = storage.crystal_overgrowth_active or {}
     storage.crystal_overgrowth_active[surface.index] = force and force.name or "player"
@@ -2568,6 +2662,321 @@ ACTIONS.bright_day = function(surface, ev, ship_stub, meta)
     
 --    game.print({ "wdm-expansion.bright_day_started", surface.name })
     debug("bright_day started on surface " .. tostring(surface.name) .. ", solar=" .. tostring(solar_mult) .. " daytime=" .. tostring(daytime))
+end
+
+-- ============================================================
+-- ACTION: radiation_background - радиоактивные пласты
+local function is_radioactive_tile_available()
+    local tile_protos = prototypes and prototypes.tile
+    if not tile_protos then return false end
+    return tile_protos[RADIOACTIVE_TILE] ~= nil
+end
+
+-- Проверяет, можно ли закрасить тайл радиоактивным грунтом (не вода, не out-of-map).
+local function can_paint_radioactive_tile(surface, x, y)
+    local ok, tile = pcall(function() return surface.get_tile(x, y) end)
+    if not (ok and tile and tile.valid and tile.name) then return false end
+    if tile.name == "out-of-map" or tile.name == RADIOACTIVE_TILE then return false end
+
+    local tile_proto = prototypes.tile and prototypes.tile[tile.name]
+    if tile_proto then
+        if tile_proto.fluid then return false end
+        if tile_proto.is_foundation then return false end
+    end
+
+    local collides_ok, is_water = pcall(function() return tile.collides_with("water-tile") end)
+    if collides_ok and is_water then return false end
+
+    return true
+end
+
+-- Хранение зон пластов, и поиск врагов только в них.
+local MAX_RADIATION_AREAS = 64
+
+local function add_radiation_area(record, box)
+    if not (record and box) then return end
+    record.areas = record.areas or {}
+    local areas = record.areas
+
+    -- Сливаем с любым пересекающимся прямоугольником.
+    local margin = 8
+    for i = 1, #areas do
+        local a = areas[i]
+        if box.left_top.x - margin <= a.right_bottom.x and box.right_bottom.x + margin >= a.left_top.x
+            and box.left_top.y - margin <= a.right_bottom.y and box.right_bottom.y + margin >= a.left_top.y then
+            if box.left_top.x < a.left_top.x then a.left_top.x = box.left_top.x end
+            if box.left_top.y < a.left_top.y then a.left_top.y = box.left_top.y end
+            if box.right_bottom.x > a.right_bottom.x then a.right_bottom.x = box.right_bottom.x end
+            if box.right_bottom.y > a.right_bottom.y then a.right_bottom.y = box.right_bottom.y end
+            return
+        end
+    end
+
+    if #areas < MAX_RADIATION_AREAS then
+        areas[#areas + 1] = box
+    end
+end
+
+local function ensure_radiation_areas(surface, record)
+    if not (surface and surface.valid and record) then return end
+    if record.areas and #record.areas > 0 then return end
+    if record.areas_built then return end
+    record.areas_built = true
+
+    local tiles
+    local ok = pcall(function()
+        tiles = surface.find_tiles_filtered({ name = RADIOACTIVE_TILE })
+    end)
+    if not (ok and tiles) then return end
+
+    for i = 1, #tiles do
+        local pos = tiles[i].position
+        add_radiation_area(record, {
+            left_top = { x = pos.x, y = pos.y },
+            right_bottom = { x = pos.x + 1, y = pos.y + 1 }
+        })
+    end
+end
+
+-- Рисует одну вытянутую полосу радиоактивного грунта. Возвращает число закрашенных тайлов и bbox.
+local function paint_radiation_patch(surface, center, min_dist, max_dist, cfg, out_tiles)
+    if not (surface and surface.valid and center) then return 0 end
+
+    local min_r = math.max(1, math.floor(min_dist or 40))
+    local max_r = math.max(min_r, math.floor(max_dist or (min_r * 3)))
+    local start_angle = math.random() * math.pi * 2
+    local start_radius = min_r + math.random() * (max_r - min_r)
+
+    local cx = center.x + math.cos(start_angle) * start_radius
+    local cy = center.y + math.sin(start_angle) * start_radius
+
+    -- Направление и размеры полосы.
+    local dir = math.random() * math.pi * 2
+    local length = math.random(cfg.patch_length_min or 60, cfg.patch_length_max or 140)
+    local width = math.random(cfg.patch_width_min or 6, cfg.patch_width_max or 14)
+    local half_width = math.max(1, math.floor(width / 2))
+    local wiggle = cfg.patch_wiggle or 0.35
+
+    local painted = 0
+    local seen = {}
+
+    local min_tx, min_ty, max_tx, max_ty
+
+    for _ = 1, length do
+        dir = dir + (math.random() - 0.5) * wiggle
+        cx = cx + math.cos(dir)
+        cy = cy + math.sin(dir)
+        local perp = dir + math.pi * 0.5
+
+        for w = -half_width, half_width do
+            local tx = math.floor(cx + math.cos(perp) * w)
+            local ty = math.floor(cy + math.sin(perp) * w)
+            local key = tx .. ":" .. ty
+            if not seen[key] then
+                seen[key] = true
+                if can_paint_radioactive_tile(surface, tx, ty) then
+                    out_tiles[#out_tiles + 1] = { name = RADIOACTIVE_TILE, position = { x = tx, y = ty } }
+                    painted = painted + 1
+                    if not min_tx or tx < min_tx then min_tx = tx end
+                    if not max_tx or tx > max_tx then max_tx = tx end
+                    if not min_ty or ty < min_ty then min_ty = ty end
+                    if not max_ty or ty > max_ty then max_ty = ty end
+                end
+            end
+        end
+    end
+
+    local box
+    if painted > 0 then
+        box = { left_top = { x = min_tx, y = min_ty }, right_bottom = { x = max_tx + 1, y = max_ty + 1 } }
+    end
+    return painted, box
+end
+
+-- Лента идёт непрерывно из породившего чанка в сторону соседних, поэтому в каждом
+-- чанке кластера она «стыкуется», а длина примерно как у стартовых пластов.
+-- Кэш проверки "можно ли красить" на уровне модуля (сбрасывать при смене событий/настройки).
+-- Если can_paint_radioactive_tile уже кэширует внутри — этот блок можно убрать.
+
+local DIRS = {
+    { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
+    { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 },
+}
+
+-- Быстрый числовой ключ для координат (тайлы в разумных пределах ±2^20).
+local function key2(x, y)
+    return x * 2097152 + y   -- 2^21, с запасом
+end
+
+local function paint_radiation_cluster(surface, chunk_position, cfg, out_tiles)
+    if not (surface and surface.valid and chunk_position) then return 0 end
+
+    local cx = chunk_position.x
+    local cy = chunk_position.y
+
+    local cluster_min = cfg.chunk_cluster_min or 2
+    local cluster_max = cfg.chunk_cluster_max or 3
+    if cluster_max < cluster_min then cluster_max = cluster_min end
+    local cluster = math.random(cluster_min, cluster_max)
+
+    local d = DIRS[math.random(8)]
+    local target_cx = cx + d[1] * (cluster - 1)
+    local target_cy = cy + d[2] * (cluster - 1)
+
+    -- Стартовая точка
+    local px = cx * 32 + 16 + (math.random() - 0.5) * 24
+    local py = cy * 32 + 16 + (math.random() - 0.5) * 24
+
+    -- Направление к концу кластера
+    local dx = target_cx * 32 + 16 - px
+    local dy = target_cy * 32 + 16 - py
+    local dir = math.atan2(dy, dx)
+
+    local length = math.max(
+        cluster * 32,
+        math.random(cfg.patch_length_min or 60, cfg.patch_length_max or 140)
+    )
+    local width = math.random(cfg.patch_width_min or 6, cfg.patch_width_max or 14)
+    local half_width = math.max(1, math.floor(width / 2))
+    local wiggle = (cfg.patch_wiggle or 0.35) * 0.6
+    local wiggle_half = wiggle * 0.5
+
+    local min_cx = math.min(cx, target_cx) - 1
+    local max_cx = math.max(cx, target_cx) + 1
+    local min_cy = math.min(cy, target_cy) - 1
+    local max_cy = math.max(cy, target_cy) + 1
+
+    local painted = 0
+    local seen = {}
+    local chunk_gen_cache = {}
+
+    local min_tx, min_ty, max_tx, max_ty
+    local add_tile = out_tiles  -- локальная ссылка для скорости
+
+    -- Проверка чанка: без pcall/замыкания
+    local function chunk_generated(cx2, cy2)
+        local k = key2(cx2, cy2)
+        local v = chunk_gen_cache[k]
+        if v == nil then
+            v = surface.is_chunk_generated({ x = cx2, y = cy2 })
+            chunk_gen_cache[k] = v
+        end
+        return v
+    end
+
+    for _ = 1, length do
+        dir = dir + (math.random() - 0.5) * wiggle
+        local cos_dir = math.cos(dir)
+        local sin_dir = math.sin(dir)
+        px = px + cos_dir
+        py = py + sin_dir
+
+        local perp = dir + math.pi * 0.5
+        local cos_perp = math.cos(perp)
+        local sin_perp = math.sin(perp)
+
+        for off = -half_width, half_width do
+            local tx = math.floor(px + cos_perp * off)
+            local ty = math.floor(py + sin_perp * off)
+
+            local ckx = math.floor(tx / 32)
+            local cky = math.floor(ty / 32)
+
+            if ckx >= min_cx and ckx <= max_cx and cky >= min_cy and cky <= max_cy then
+                local k = key2(tx, ty)
+                if not seen[k] then
+                    seen[k] = true
+                    if chunk_generated(ckx, cky)
+                        and can_paint_radioactive_tile(surface, tx, ty) then
+                        add_tile[#add_tile + 1] = {
+                            name = RADIOACTIVE_TILE,
+                            position = { x = tx, y = ty },
+                        }
+                        painted = painted + 1
+                        if not min_tx or tx < min_tx then min_tx = tx end
+                        if not max_tx or tx > max_tx then max_tx = tx end
+                        if not min_ty or ty < min_ty then min_ty = ty end
+                        if not max_ty or ty > max_ty then max_ty = ty end
+                    end
+                end
+            end
+        end
+    end
+
+    local box
+    if painted > 0 then
+        box = {
+            left_top    = { x = min_tx, y = min_ty },
+            right_bottom = { x = max_tx + 1, y = max_ty + 1 },
+        }
+    end
+    return painted, box
+end
+
+ACTIONS.radiation_background = function(surface, ev, ship_stub, meta)
+    if not (surface and surface.valid) then return end
+    if not is_radioactive_tile_available() then
+        debug("radiation_background skipped: tile '" .. RADIOACTIVE_TILE .. "' is not available")
+        return
+    end
+
+    local cfg = ev or DEFAULT_EVENTS.radiation_background
+    local force = ship_stub and ship_stub.force
+    if type(force) == "string" then force = game.forces[force] end
+
+    local threat = get_threat_level(surface, force, {
+        tech_weight = cfg.tech_influence,
+        tech_tiers = cfg.tech_tiers
+    }).threat
+
+    -- Центр генерации
+    local center = (ship_stub and ship_stub.active_space_station and ship_stub.active_space_station.position)
+        or (ship_stub and ship_stub.position)
+        or { x = 0, y = 0 }
+
+    local min_dist, max_dist = compute_spawn_distance_range_by_tech(force, cfg)
+
+    local patch_count = math.random(cfg.patch_count_min or 3, cfg.patch_count_max or 6)
+    patch_count = patch_count + math.floor((threat or 0) * (cfg.patch_threat_bonus or 0))
+
+    local tiles = {}
+    local boxes = {}
+    local painted = 0
+    for _ = 1, patch_count do
+        local patch_painted, patch_box = paint_radiation_patch(surface, center, min_dist, max_dist, cfg, tiles)
+        painted = painted + patch_painted
+        if patch_box then boxes[#boxes + 1] = patch_box end
+    end
+
+    if #tiles > 0 then
+        -- (tiles, correct_tiles, remove_colliding_entities, remove_colliding_decoratives, raise_event)
+        surface.set_tiles(tiles, true, false, false, false)
+    end
+
+    if painted > 0 then
+        storage.radiation_active = storage.radiation_active or {}
+        local record = {
+            active = true,
+            damage = (cfg.damage_per_second or 2) * (1 + (threat or 0) * (cfg.damage_threat_multiplier or 0)),
+            ref_position = { x = center.x, y = center.y },
+            min_dist = min_dist,
+            max_dist = max_dist,
+            chunk_spawn_chance = (cfg.chunk_spawn_chance ~= nil) and cfg.chunk_spawn_chance or 0.12
+        }
+        for i = 1, #boxes do
+            add_radiation_area(record, boxes[i])
+        end
+        storage.radiation_active[surface.index] = record
+        if update_tick_handlers then update_tick_handlers() end
+        if sync_chunk_generated_handler then sync_chunk_generated_handler() end
+
+        notify_all("start", { "wdm-expansion.radiation_background_started", surface.name })
+    end
+
+    debug("radiation_background on surface " .. tostring(surface.name)
+        .. ": patches=" .. tostring(patch_count)
+        .. ", tiles=" .. tostring(painted)
+        .. ", threat=" .. string.format("%.3f", threat or 0))
 end
 
 -- GAS LEAK SYSTEM
@@ -2933,7 +3342,7 @@ ACTIONS.gas_leak = function(surface, ev, ship_stub, meta)
     
     if update_tick_handlers then update_tick_handlers() end
     
-    game.print({ "wdm-expansion.gas_leak_started", surface.name })
+    notify_all("danger", { "wdm-expansion.gas_leak_started", surface.name })
     for _, player in pairs(game.connected_players) do
         if player.surface and player.surface.valid and player.surface.index == surface_index then
             open_gas_leak_repair_gui(player, surface_index)
@@ -3057,7 +3466,7 @@ local function repair_gas_leak(player, surface_index)
     
     leak_data.active = false
     stop_all_gas_leaks()
-    game.print({ "wdm-expansion.gas_leak_floor_repaired", game.surfaces[surface_index] and game.surfaces[surface_index].name or "unknown" })
+    notify_all("danger", { "wdm-expansion.gas_leak_floor_repaired", game.surfaces[surface_index] and game.surfaces[surface_index].name or "unknown" })
     debug("gas_leak repaired on surface " .. tostring(surface_index) .. " by player " .. tostring(player.name))
     return true
 end
@@ -3328,6 +3737,10 @@ spawn_crystals = function(surface, count, center_pos, blocked_zone, announce_in_
     local ev_cfg = (storage and storage.events and storage.events.crystal_overgrowth) or DEFAULT_EVENTS.crystal_overgrowth
     local big_chance = (opts and opts.big_chance) or (ev_cfg and ev_cfg.big_crystal_chance) or 0
 
+    -- Собираем координаты спавненных кристаллов, чтобы вывести одно сообщение
+    -- (одна gps-метка на кристалл) вместо отдельного сообщения на каждый кристалл
+    local initial_pings = {}
+
     for i = 1, count do
         local pos
         -- use tech-based distances for crystals; center_pos means spawn around ship center
@@ -3359,12 +3772,16 @@ spawn_crystals = function(surface, count, center_pos, blocked_zone, announce_in_
                 end)
                 if ok and crystal and crystal.valid then
                     register_crystal_bonus_override(crystal)
-                    if announce_in_chat then
-                        game.print({ "wdm-expansion.crystal_initial_ping", crystal.gps_tag })
+                    if announce_in_chat and crystal.gps_tag then
+                        table.insert(initial_pings, crystal.gps_tag)
                     end
                 end
             end
         end
+    end
+
+    if announce_in_chat and #initial_pings > 0 then
+        notify_all("info", { "wdm-expansion.crystal_initial_ping", table.concat(initial_pings, ", ") })
     end
 end
 
@@ -3414,7 +3831,7 @@ end
 
 local function apply_crystal_mined_bonus(bonus_override)
     local ev = storage.events and storage.events.crystal_overgrowth or DEFAULT_EVENTS.crystal_overgrowth
-    local bonus = (ev and ev.enemy_bonus_per_crystal) or 0.09
+    local bonus = (ev and ev.enemy_bonus_per_crystal)
     if type(bonus_override) == "number" then
         bonus = bonus_override
     end
@@ -3434,7 +3851,7 @@ local function apply_crystal_mined_bonus(bonus_override)
         if not (f and f.valid) then return end
         if f.set_ammo_damage_modifier then pcall(function() f.set_ammo_damage_modifier("humanoid_ammo_category", storage.pirate_humanoid_damage_bonus) end) end
     end)
-    game.print({"wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100})
+    notify_all("danger", { "wdm-expansion.crystal_mined", storage.enemy_melee_damage_bonus * 100 })
     debug("Crystal mined, enemy melee bonus is now " .. tostring(storage.enemy_melee_damage_bonus)
         .. ", biological bonus is now " .. tostring(storage.enemy_biological_damage_bonus)
         .. ", pirate humanoid bonus is now " .. tostring(storage.pirate_humanoid_damage_bonus))
@@ -3500,7 +3917,7 @@ local function end_earthquake(surface_index)
 
     local surface = game.surfaces[surface_index]
     if surface and surface.valid then
-        game.print({ "wdm-expansion.earthquake_ended", surface.name })
+        notify_all("info", { "wdm-expansion.earthquake_ended", surface.name })
     end
 
     debug("Earthquake ended on surface " .. tostring(surface_index) .. ", restored speed for " .. tostring(table_size(eq_data.affected_players)) .. " players")
@@ -3518,7 +3935,7 @@ local function end_lost_deck(surface_index)
     local data = storage.lost_decks[surface_index]
     local surface = game.surfaces[surface_index]
     if surface and surface.valid then
-        game.print({ "wdm-expansion.lost_deck_restored", data.surface_name or surface.name })
+        notify_all("info", { "wdm-expansion.lost_deck_restored", data.surface_name or surface.name })
     end
     storage.lost_decks[surface_index] = nil
     debug("lost_deck restored on surface " .. tostring(surface_index))
@@ -3536,7 +3953,7 @@ local function end_magnetic_storm(surface_index)
             debug("electromagnetic_storm: failed to restore magnetic-storm on surface " .. tostring(surface.name))
         end
         if not data.silent then
-            game.print({ "wdm-expansion.electromagnetic_storm_ended" })
+            notify_all("info", { "wdm-expansion.electromagnetic_storm_ended" })
         end
     end
     restore_storm_disabled_on_surface(surface_index)
@@ -3616,12 +4033,190 @@ local function on_custom_planet_event(event)
 end
 
 -- Проверка землетрясений (вызывается через on_nth_tick раз в секунду)
+-- Радиоактивный фон: периодический урон персонажам, стоящим на радиоактивных тайлах.
+-- Радиоактивный фон: периодический урон персонажам, стоящим на радиоактивных тайлах.
+-- Оптимизация: одна дешёвая проверка тайла на игрока, без pcall (позиция игрока всегда
+-- на сгенерированном чанке), и ранний выход, если на поверхности радиации нет.
+local function apply_radiation_damage()
+    local radiation_active = storage.radiation_active
+    if not radiation_active or not next(radiation_active) then return end
+
+    for _, player in pairs(game.connected_players) do
+        if player and player.valid and player.character and player.character.valid then
+            local surface = player.surface
+            if surface and surface.valid then
+                local data = radiation_active[surface.index]
+                if data then
+                    local pos = player.character.position
+                    local tile = surface.get_tile(pos.x, pos.y)
+                    if tile and tile.valid and tile.name == RADIOACTIVE_TILE then
+                        player.character.damage(data.damage or 0, game.forces.neutral, RADIATION_DAMAGE_TYPE)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- Радиоактивная мутация врагов
+-- Враги, стоящие на радиоактивных тайлах, с небольшим шансом повышают свой тир.
+-- ============================================================
+local RADIATION_MUTATION_INTERVAL_TICKS = 900 -- проверка мутаций раз в 5 секунд
+
+-- Цепочки повышения тира (базовые тиры). Ключ -> следующий тир.
+local RADIATION_MUTATION_CHAINS = {
+    -- Базовые
+    ["small-biter"] = "medium-biter",
+    ["medium-biter"] = "big-biter",
+    ["small-spitter"] = "medium-spitter",
+    ["medium-spitter"] = "big-spitter",
+}
+if has_active_mod("Explosive_biters") then
+    RADIATION_MUTATION_CHAINS["small-explosive-biter"] = "medium-explosive-biter"
+    RADIATION_MUTATION_CHAINS["medium-explosive-biter"] = "big-explosive-biter"
+    RADIATION_MUTATION_CHAINS["small-explosive-spitter"] = "medium-explosive-spitter"
+    RADIATION_MUTATION_CHAINS["medium-explosive-spitter"] = "big-explosive-spitter"
+end
+if has_active_mod("Cold_biters") then
+    RADIATION_MUTATION_CHAINS["small-cold-biter"] = "medium-cold-biter"
+    RADIATION_MUTATION_CHAINS["medium-cold-biter"] = "big-cold-biter"
+    RADIATION_MUTATION_CHAINS["small-cold-spitter"] = "medium-cold-spitter"
+    RADIATION_MUTATION_CHAINS["medium-cold-spitter"] = "big-cold-spitter"
+end
+if has_active_mod("Toxic_biters") then
+    RADIATION_MUTATION_CHAINS["small-toxic-biter"] = "medium-toxic-biter"
+    RADIATION_MUTATION_CHAINS["medium-toxic-biter"] = "big-toxic-biter"
+    RADIATION_MUTATION_CHAINS["small-toxic-spitter"] = "medium-toxic-spitter"
+    RADIATION_MUTATION_CHAINS["medium-toxic-spitter"] = "big-toxic-spitter"
+end
+if has_active_mod("Arachnids_enemy") then
+    RADIATION_MUTATION_CHAINS["arachnid-biter-drone-unit"] = "arachnid-biter-warrior-unit"
+    RADIATION_MUTATION_CHAINS["arachnid-biter-warrior-unit"] = "arachnid-biter-tiger-unit"
+    RADIATION_MUTATION_CHAINS["arachnid-spitter-smallspitter-unit"] = "arachnid-spitter-mediumspitter-unit"
+    RADIATION_MUTATION_CHAINS["arachnid-spitter-mediumspitter-unit"] = "arachnid-spitter-bigspitter-unit"
+end
+if has_active_mod("ArmouredBiters") then
+    RADIATION_MUTATION_CHAINS["small-armoured-biter"] = "medium-armoured-biter"
+    RADIATION_MUTATION_CHAINS["medium-armoured-biter"] = "big-armoured-biter"
+end
+
+local radiation_mutation_sources_cache
+local function get_radiation_mutation_sources()
+    if radiation_mutation_sources_cache then return radiation_mutation_sources_cache end
+    local list = {}
+    for name, next_name in pairs(RADIATION_MUTATION_CHAINS) do
+        if prototypes.entity[name] and prototypes.entity[next_name] then
+            list[#list + 1] = name
+        end
+    end
+    radiation_mutation_sources_cache = list
+    return list
+end
+
+local function mutate_enemy_unit(unit, next_name)
+    if not (unit and unit.valid) then return false end
+    if not (next_name and prototypes.entity and prototypes.entity[next_name]) then return false end
+
+    local surface = unit.surface
+    if not (surface and surface.valid) then return false end
+
+    local position = unit.position
+    local force = unit.force
+    local direction = unit.direction
+
+    -- Запоминаем группу/команду
+    local group, command
+    pcall(function()
+        local commandable = unit.commandable
+        if commandable then
+            group = commandable.parent_group
+            command = commandable.command
+        end
+    end)
+
+    local ok, new_unit = pcall(function()
+        return surface.create_entity({ name = next_name, position = position, force = force, direction = direction })
+    end)
+    if not (ok and new_unit and new_unit.valid) then return false end
+
+    -- Наследуем поведение
+    local assigned = false
+    if group then
+        assigned = pcall(function() group.add_member(new_unit) end)
+    end
+    if not assigned and command then
+        assigned = pcall(function() new_unit.commandable.set_command(command) end)
+    end
+    if not assigned then
+        pcall(function() new_unit.commandable.set_command({ type = defines.command.wander }) end)
+    end
+
+    unit.destroy()
+    return true
+end
+
+-- Периодически проверяет врагов на радиоактивных тайлах и с шансом мутирует их.
+local function apply_radiation_mutation()
+    if game.tick % RADIATION_MUTATION_INTERVAL_TICKS ~= 0 then return end
+
+    local radiation_active = storage.radiation_active
+    if not radiation_active or not next(radiation_active) then return end
+
+    local sources = get_radiation_mutation_sources()
+    if #sources == 0 then return end
+
+    local cfg = (storage.events and storage.events.radiation_background) or DEFAULT_EVENTS.radiation_background
+    local chance = cfg and cfg.mutation_chance
+    if chance == nil then chance = 0.05 end
+    if chance <= 0 then return end
+
+    for surface_index, record in pairs(radiation_active) do
+        local surface = game.surfaces[surface_index]
+        if surface and surface.valid then
+            ensure_radiation_areas(surface, record)
+
+            local areas = record.areas
+            if areas and #areas > 0 then
+                for ai = 1, #areas do
+                    local units = surface.find_entities_filtered({
+                        area = areas[ai],
+                        type = "unit",
+                        force = "enemy",
+                        name = sources
+                    })
+                    for i = 1, #units do
+                        local unit = units[i]
+                        if unit and unit.valid then
+                            local unit_name = unit.name
+                            local next_name = RADIATION_MUTATION_CHAINS[unit_name]
+                            if next_name then
+                                local pos = unit.position
+                                local tile = surface.get_tile(pos.x, pos.y)
+                                if tile and tile.valid and tile.name == RADIOACTIVE_TILE then
+                                    if math.random() <= chance then
+                                        if mutate_enemy_unit(unit, next_name) then
+                                            debug("radiation mutation: " .. tostring(unit_name) .. " -> " .. tostring(next_name)
+                                                .. " on surface " .. tostring(surface.name))
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function check_earthquakes()
     -- Если нет ни активных землетрясений, ни потерянных уровней, отключаем on_nth_tick(60)
     if (not storage.active_earthquakes or not next(storage.active_earthquakes))
         and (not storage.lost_decks or not next(storage.lost_decks))
         and (not storage.active_magnetic_storms or not next(storage.active_magnetic_storms))
-        and (not storage.gas_leak_active or not next(storage.gas_leak_active)) then
+        and (not storage.gas_leak_active or not next(storage.gas_leak_active))
+        and (not storage.radiation_active or not next(storage.radiation_active)) then
         script.on_nth_tick(60, nil)
         return
     end
@@ -3635,7 +4230,7 @@ local function check_earthquakes()
                 local ld = storage.lost_decks[player.surface.index]
                 if ld and ld.end_tick and now < ld.end_tick then
                     local teleported = teleport_player_to_available_deck(player)
-                    if teleported then player.print({ "wdm-expansion.lost_deck_teleported" }) end
+                    if teleported then notify_player(player, "personal", { "wdm-expansion.lost_deck_teleported" }) end
                     debug("Enforced lost_deck prevention for player " .. tostring(player.index) .. " on surface " .. tostring(player.surface and player.surface.name))
                 end
             end
@@ -3692,12 +4287,17 @@ local function check_earthquakes()
     if external_nth_tick_handler then
         pcall(external_nth_tick_handler)
     end
+
+    -- Радиоактивный фон: периодический урон персонажам на радиоактивных пластах
+    apply_radiation_damage()
+    apply_radiation_mutation()
     
     -- Если после удаления землетрясений и восстановления уровней их не осталось, отключаем on_nth_tick(60)
     if not next(storage.active_earthquakes)
         and not next(storage.lost_decks or {})
         and not next(storage.active_magnetic_storms or {})
-        and not (storage.gas_leak_active and next(storage.gas_leak_active)) then
+        and not (storage.gas_leak_active and next(storage.gas_leak_active))
+        and not (storage.radiation_active and next(storage.radiation_active)) then
         script.on_nth_tick(60, nil)
     end
 end
@@ -3718,7 +4318,7 @@ local function process_scheduled_events()
         -- Check for has_boss_2 detection message (at half time)
         if job.name == "has_boss_2" and job.meta and job.meta.detected_message_tick and not job.meta.message_shown then
             if game.tick >= job.meta.detected_message_tick then
-                game.print({ "wdm-expansion.has_boss_2_detected" })
+                notify_all("danger", { "wdm-expansion.has_boss_2_detected" })
                 job.meta.message_shown = true
             end
         end
@@ -3766,6 +4366,7 @@ update_tick_handlers = function()
     local has_lost = storage.lost_decks and next(storage.lost_decks)
     local has_storms = storage.active_magnetic_storms and next(storage.active_magnetic_storms)
     local has_gas_leaks = storage.gas_leak_active and next(storage.gas_leak_active)
+    local has_radiation = storage.radiation_active and next(storage.radiation_active)
     
     -- Включаем on_tick только если есть scheduled events
     if has_scheduled then
@@ -3775,7 +4376,7 @@ update_tick_handlers = function()
     end
     
     -- on_nth_tick(60) нужен для землетрясений, потерянных уровней, цикла магнитного шторма
-    if has_earthquakes or has_lost or has_storms then
+    if has_earthquakes or has_lost or has_storms or has_radiation then
         script.on_nth_tick(60, check_earthquakes)
     else
         script.on_nth_tick(60, nil)
@@ -3826,7 +4427,7 @@ local function on_player_changed_surface(event)
         if ld.end_tick and game.tick < ld.end_tick then
             local teleported = teleport_player_to_available_deck(player)
             if teleported then
-                player.print({ "wdm-expansion.lost_deck_teleported" })
+                notify_player(player, "personal", { "wdm-expansion.lost_deck_teleported" })
                 debug("Prevented player " .. tostring(event.player_index) .. " from entering lost deck " .. tostring(new_surface.name))
             else
                 debug("Prevented player " .. tostring(event.player_index) .. " from entering lost deck but no destination found")
@@ -3836,12 +4437,51 @@ local function on_player_changed_surface(event)
 end
 
 
+-- Радиоактивный фон: генерация новых пластов при появлении (исследовании) чанков.
+local function handle_radiation_chunk_generated(surface, surface_index, event)
+    local rad = storage.radiation_active
+    local record = rad and rad[surface_index]
+    if not record then return end
+
+    local chance = tonumber(record.chunk_spawn_chance) or 0
+    if chance <= 0 or math.random() > chance then return end
+
+    local chunk_position = event.position or event.chunk_position
+    if not chunk_position then return end
+
+    -- Минимальная дистанция от корабля: пласты не появляются рядом с базой/станцией.
+    local ref = record.ref_position
+    local min_dist = record.min_dist or 0
+    if ref and min_dist > 0 then
+        local chunk_center = { x = (chunk_position.x * 32) + 16, y = (chunk_position.y * 32) + 16 }
+        if distance(chunk_center, ref) < min_dist then return end
+    end
+
+    local cfg = (storage.events and storage.events.radiation_background) or DEFAULT_EVENTS.radiation_background
+    if not cfg then return end
+
+    local tiles = {}
+    local painted, box = paint_radiation_cluster(surface, chunk_position, cfg, tiles)
+    if painted <= 0 then return end
+
+    surface.set_tiles(tiles, true, false, false, false)
+    add_radiation_area(record, box)
+
+    debug("radiation patch generated on surface " .. tostring(surface.name)
+        .. " at chunk X:" .. tostring(chunk_position.x) .. " Y:" .. tostring(chunk_position.y)
+        .. ", tiles=" .. tostring(painted))
+end
+
 local function on_chunk_generated(event)
     if not is_mod_enabled() then return end
     if not event or not event.surface or not event.surface.valid then return end
 
     local surface = event.surface
     local surface_index = surface.index
+
+    -- Радиоактивный фон: новые пласты при генерации чанков (исследовании планеты)
+    handle_radiation_chunk_generated(surface, surface_index, event)
+
     local ev = storage.events and storage.events.ruins or DEFAULT_EVENTS.ruins
     if not ev then return end
 
@@ -3923,7 +4563,7 @@ local function on_player_joined_game(event)
     local ld = storage.lost_decks and storage.lost_decks[surface_index]
     if ld and ld.end_tick and game.tick < ld.end_tick then
         local teleported = teleport_player_to_available_deck(player)
-        if teleported then player.print({ "wdm-expansion.lost_deck_teleported" }) end
+        if teleported then notify_player(player, "personal", { "wdm-expansion.lost_deck_teleported" }) end
     end
 end
 
@@ -4077,13 +4717,13 @@ local function on_ship_warping(event)
     local new_pirate_humanoid_bonus = old_pirate_humanoid_bonus
 
     if old_melee_bonus > 0 then
-        new_melee_bonus = math.max(0, old_melee_bonus - 0.015)
+        new_melee_bonus = math.max(0, old_melee_bonus - 0.025)
     end
     if old_biological_bonus > 0 then
-        new_biological_bonus = math.max(0, old_biological_bonus - 0.015)
+        new_biological_bonus = math.max(0, old_biological_bonus - 0.025)
     end
     if old_pirate_humanoid_bonus > 0 then
-        new_pirate_humanoid_bonus = math.max(0, old_pirate_humanoid_bonus - 0.015)
+        new_pirate_humanoid_bonus = math.max(0, old_pirate_humanoid_bonus - 0.025)
     end
     -- ОСТАНОВКА ГЕНЕРАЦИИ РУИН
     if storage and storage.ruins_active_surfaces then
@@ -4240,10 +4880,14 @@ end
 
 
 local function should_enable_chunk_generated_handler()
-    return is_mod_enabled()
-        and storage
-        and storage.ruins_active_surfaces
-        and next(storage.ruins_active_surfaces) ~= nil
+    if not (is_mod_enabled() and storage) then return false end
+    if storage.ruins_active_surfaces and next(storage.ruins_active_surfaces) ~= nil then
+        return true
+    end
+    if storage.radiation_active and next(storage.radiation_active) ~= nil then
+        return true
+    end
+    return false
 end
 
 sync_chunk_generated_handler = function()
@@ -4403,6 +5047,9 @@ local function on_surface_deleted(event)
             storage.triggered_surface_events[si_key] = nil
         end
         storage.ruins_active_surfaces[event.surface_index] = nil
+        if storage.radiation_active then
+            storage.radiation_active[event.surface_index] = nil
+        end
         sync_chunk_generated_handler()
     end
     if s_name_key then
@@ -4422,6 +5069,8 @@ local function on_runtime_mod_setting_changed(event)
     elseif event.setting == "wdm-expansion-disable-friendly-fire" then
         debug("Setting wdm-expansion-disable-friendly-fire changed, applying friendly fire state...")
         apply_friendly_fire_setting()
+    elseif event.setting == "wdm-expansion-event-notify-level" then
+        debug("Setting wdm-expansion-event-notify-level changed to " .. tostring(get_event_notify_level()))
     end
 end
 
